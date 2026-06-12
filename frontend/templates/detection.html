@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Detection - AI Sign Language Translator{% endblock %}
+
+{% block content %}
+<section class="page-content">
+    <h1>Sign Detection</h1>
+    <div class="detection-container">
+        <p id="status" class="status">Click "Start Camera" to begin</p>
+        <div class="camera-select" style="margin-bottom: 1rem;">
+            <label for="cameraSelect">Select Camera:</label>
+            <select id="cameraSelect" style="padding: 0.5rem; border-radius: 4px; border: 1px solid #ddd; min-width: 200px;">
+                <option value="">Loading cameras...</option>
+            </select>
+            <button id="refreshCamerasBtn" class="btn-secondary" style="padding: 0.5rem 1rem; margin-left: 0.5rem;">Refresh</button>
+        </div>
+        <div class="video-container">
+            <video id="webcam" autoplay playsinline style="width: 100%; max-width: 640px; border: 2px solid #3498db; border-radius: 8px;"></video>
+            <canvas id="canvas" style="display: none;"></canvas>
+        </div>
+        <div class="controls">
+            <button id="startBtn" class="btn-primary">Start Camera</button>
+            <button id="stopBtn" class="btn-secondary">Stop Camera</button>
+        </div>
+        <div class="results">
+            <h3>Detected Sign:</h3>
+            <p id="detectedText">Waiting for detection...</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

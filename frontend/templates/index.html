@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Home - AI Sign Language Translator{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-content">
+        <h1>AI Sign Language Translator</h1>
+        <p>Real-time sign language recognition using artificial intelligence</p>
+        <a href="/detection" class="btn-primary">Start Detection</a>
+    </div>
+</section>
+
+<section class="page-content" style="text-align: center; margin-top: 30px;">
+    <h2>📲 Install This App</h2>
+    <div class="feature-card" style="display: inline-block; max-width: 600px; text-align: left;">
+        <h3>How to Install on Your Phone:</h3>
+        <ol style="margin-left: 20px;">
+            <li>Connect your phone and laptop to the <strong>same Wi-Fi network</strong></li>
+            <li>On your phone's browser, go to:
+                <strong style="color: #2c3e50; font-size: 1.1em; display: block; margin: 10px 0;">
+                    http://10.71.95.21:5000
+                </strong>
+            </li>
+            <li>Tap the install prompt (for Android/Chrome) or add to home screen (for iPhone/Safari)</li>
+        </ol>
+    </div>
+</section>
+
+<section class="features">
+    <div class="features-container">
+        <div class="feature-card">
+            <h3>Real-Time Detection</h3>
+            <p>Capture and recognize hand gestures instantly using your webcam</p>
+        </div>
+        <div class="feature-card">
+            <h3>Text & Speech</h3>
+            <p>Translate signs to text and convert to speech automatically</p>
+        </div>
+        <div class="feature-card">
+            <h3>Dataset Management</h3>
+            <p>Build and manage your own sign language dataset</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Dataset - AI Sign Language Translator{% endblock %}
+
+{% block content %}
+<section class="page-content">
+    <h1>Dataset Management</h1>
+    <div class="dataset-container">
+        <div class="add-gesture">
+            <h3>Add New Gesture</h3>
+            <form id="gestureForm">
+                <input type="text" id="gestureName" placeholder="Gesture Name" required>
+                <textarea id="gestureDesc" placeholder="Description"></textarea>
+                <div style="margin-bottom: 1rem;">
+                    <label for="gestureLanguage">Language:</label>
+                    <select id="gestureLanguage" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #ddd;">
+                        <option value="isl">Indian Sign Language (ISL)</option>
+                        <option value="ben-sl">Bengali Sign Language</option>
+                        <option value="hin-sl">Hindi Sign Language</option>
+                        <option value="kan-sl">Kannada Sign Language</option>
+                        <option value="tam-sl">Tamil Sign Language</option>
+                        <option value="tel-sl">Telugu Sign Language</option>
+                        <option value="mar-sl">Marathi Sign Language</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">Add Gesture</button>
+            </form>
+        </div>
+        <div class="gesture-list">
+            <h3>Gesture List</h3>
+            <div style="margin-bottom: 1rem;">
+                <label for="filterLanguage">Filter by Language:</label>
+                <select id="filterLanguage" style="padding: 0.5rem; border-radius: 4px; border: 1px solid #ddd; min-width: 200px;">
+                    <option value="isl">Indian Sign Language (ISL)</option>
+                    <option value="ben-sl">Bengali Sign Language</option>
+                    <option value="hin-sl">Hindi Sign Language</option>
+                    <option value="kan-sl">Kannada Sign Language</option>
+                    <option value="tam-sl">Tamil Sign Language</option>
+                    <option value="tel-sl">Telugu Sign Language</option>
+                    <option value="mar-sl">Marathi Sign Language</option>
+                </select>
+            </div>
+            <ul id="gestureList"></ul>
+        </div>
+    </div>
+</section>
+{% endblock %}

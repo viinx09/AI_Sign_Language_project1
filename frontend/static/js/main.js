@@ -1,0 +1,433 @@
+document.addEventListener('DOMContentLoaded', function() {
+    const gestureForm = document.getElementById('gestureForm');
+    const gestureList = document.getElementById('gestureList');
+    const contactForm = document.getElementById('contactForm');
+    const statusElement = document.getElementById('status');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
+    const languageSelect = document.getElementById('languageSelect');
+    const filterLanguage = document.getElementById('filterLanguage');
+    const gestureLanguage = document.getElementById('gestureLanguage');
+    
+    // Store selected language, default to 'isl' (Indian Sign Language)
+    let selectedLanguage = localStorage.getItem('selectedLanguage') || 'isl';
+    
+    // Initialize language selector if present
+    if (languageSelect) {
+        languageSelect.value = selectedLanguage;
+        
+        languageSelect.addEventListener('change', function() {
+            selectedLanguage = this.value;
+            localStorage.setItem('selectedLanguage', selectedLanguage);
+            // Reload gestures if on dataset page
+            if (gestureList) {
+                loadGestures();
+            }
+            // Reload voices to auto-select matching voice
+            loadVoices();
+        });
+    }
+    
+    // Initialize filter language if present
+    if (filterLanguage) {
+        filterLanguage.value = selectedLanguage;
+        
+        filterLanguage.addEventListener('change', function() {
+            selectedLanguage = this.value;
+            localStorage.setItem('selectedLanguage', selectedLanguage);
+            loadGestures();
+        });
+    }
+    
+    // Initialize gesture language if present
+    if (gestureLanguage) {
+        gestureLanguage.value = selectedLanguage;
+    }
+
+    if (gestureForm) {
+        gestureForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('gestureName').value;
+            const desc = document.getElementById('gestureDesc').value;
+            const lang = document.getElementById('gestureLanguage') ? 
+                document.getElementById('gestureLanguage').value : selectedLanguage;
+            
+            try {
+                const response = await fetch('/api/gestures', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        gesture_name: name, 
+                        description: desc,
+                        language: lang
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Gesture added successfully!');
+                    gestureForm.reset();
+                    loadGestures();
+                }
+            } catch (error) {
+                console.error('Error adding gesture:', error);
+            }
+        });
+    }
+
+    async function loadGestures() {
+        if (!gestureList) return;
+        
+        try {
+            const response = await fetch(`/api/gestures?language=${selectedLanguage}`);
+            const gestures = await response.json();
+            
+            gestureList.innerHTML = '';
+            gestures.forEach(gesture => {
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>${gesture[1]}</strong>: ${gesture[2]} <em>(${getLanguageName(gesture[3])})</em>`;
+                gestureList.appendChild(li);
+            });
+            
+            const totalGestures = document.getElementById('totalGestures');
+            if (totalGestures) {
+                totalGestures.textContent = gestures.length;
+            }
+        } catch (error) {
+                console.error('Error loading gestures:', error);
+        }
+    }
+
+    function getLanguageName(code) {
+        const languages = {
+            'isl': 'Indian Sign Language (ISL)',
+            'ben-sl': 'Bengali Sign Language',
+            'hin-sl': 'Hindi Sign Language',
+            'kan-sl': 'Kannada Sign Language',
+            'tam-sl': 'Tamil Sign Language',
+            'tel-sl': 'Telugu Sign Language',
+            'mar-sl': 'Marathi Sign Language'
+        };
+        return languages[code] || code;
+    }
+
+    loadGestures();
+
+    if (contactForm) {
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Thank you for your message!');
+            contactForm.reset();
+        });
+    }
+
+    function showStatus(message, isError = false) {
+        if (statusElement) {
+            statusElement.textContent = message;
+            statusElement.style.color = isError ? '#e74c3c' : '#27ae60';
+        }
+        console.log(message);
+    }
+
+    async function loadCameras() {
+        if (!cameraSelect) return;
+        
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                cameraSelect.innerHTML = '<option value="">Camera listing not available</option>';
+                return;
+            }
+
+            // Request permission first to get real camera names
+            try {
+                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                tempStream.getTracks().forEach(track => track.stop());
+            } catch (e) {
+                console.log('No temp stream permission not granted yet');
+            }
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '';
+            
+            if (videoDevices.length === 0) {
+                cameraSelect.innerHTML = '<option value="">No cameras found</option>';
+                showStatus('No cameras detected', true);
+            } else {
+                    videoDevices.forEach((device, index) => {
+                        const option = document.createElement('option');
+                        option.value = device.deviceId;
+                        option.textContent = device.label || `Camera ${index + 1}`;
+                        cameraSelect.appendChild(option);
+                    });
+                    showStatus(`Found ${videoDevices.length} camera(s) available`);
+                }
+            } catch (error) {
+                    console.error('Error loading cameras:', error);
+                    cameraSelect.innerHTML = '<option value="">Error loading cameras</option>';
+                    showStatus('Error loading cameras: ' + error.message, true);
+            }
+        }
+
+    // Load cameras on page load
+    if (cameraSelect) {
+        loadCameras();
+    }
+
+    if (refreshCamerasBtn) {
+        refreshCamerasBtn.addEventListener('click', loadCameras);
+    }
+
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const webcam = document.getElementById('webcam');
+    
+    if (startBtn && stopBtn && webcam) {
+        let stream;
+        
+        startBtn.addEventListener('click', async function() {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Media devices API not available in this browser');
+                }
+                
+                showStatus('Requesting camera permission...');
+                
+                const selectedCameraId = cameraSelect ? cameraSelect.value : '';
+                
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                };
+                
+                if (selectedCameraId) {
+                    constraints.video.deviceId = { exact: selectedCameraId };
+                }
+                
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                webcam.srcObject = stream;
+                showStatus('Camera connected successfully!');
+                
+                webcam.onloadedmetadata = () => {
+                    webcam.play();
+                    showStatus('Camera is streaming');
+                };
+                
+                // Reload cameras to get labels now that we have permission
+                if (cameraSelect) {
+                    loadCameras();
+                }
+            } catch (error) {
+                let errorMessage = 'Could not access camera: ';
+                
+                switch (error.name) {
+                    case 'NotAllowedError':
+                        errorMessage += 'Permission denied. Please allow camera access in your browser settings.';
+                        break;
+                    case 'NotFoundError':
+                        errorMessage += 'No camera found. Please connect a camera and try again.';
+                        break;
+                    case 'NotReadableError':
+                        errorMessage += 'Camera is already in use by another application.';
+                        break;
+                    case 'OverconstrainedError':
+                        errorMessage += 'No camera matches the requested constraints.';
+                        break;
+                    case 'AbortError':
+                        errorMessage += 'Camera access aborted.';
+                        break;
+                    case 'TypeError':
+                        errorMessage += 'Invalid constraints.';
+                        break;
+                    default:
+                        errorMessage += error.message;
+                }
+                
+                console.error('Camera access error:', error);
+                showStatus(errorMessage, true);
+                alert(errorMessage);
+            }
+        });
+        
+        stopBtn.addEventListener('click', function() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                webcam.srcObject = null;
+                showStatus('Camera disconnected');
+            }
+        });
+    }
+
+    const startTranslationBtn = document.getElementById('startTranslationBtn');
+    const stopTranslationBtn = document.getElementById('stopTranslationBtn');
+    const translationWebcam = document.getElementById('translationWebcam');
+    
+    if (startTranslationBtn && stopTranslationBtn && translationWebcam) {
+        let translationStream;
+        
+        startTranslationBtn.addEventListener('click', async function() {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Media devices API not available in this browser');
+                }
+                
+                showStatus('Requesting camera permission...');
+                
+                translationStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                });
+                
+                translationWebcam.srcObject = translationStream;
+                showStatus('Camera connected successfully!');
+                
+                translationWebcam.onloadedmetadata = () => {
+                    translationWebcam.play();
+                    showStatus('Camera is streaming');
+                };
+            } catch (error) {
+                let errorMessage = 'Could not access camera: ';
+                
+                switch (error.name) {
+                    case 'NotAllowedError':
+                        errorMessage += 'Permission denied. Please allow camera access in your browser settings.';
+                        break;
+                    case 'NotFoundError':
+                        errorMessage += 'No camera found. Please connect a camera and try again.';
+                        break;
+                    case 'NotReadableError':
+                        errorMessage += 'Camera is already in use by another application.';
+                        break;
+                    case 'OverconstrainedError':
+                        errorMessage += 'No camera matches the requested constraints.';
+                        break;
+                    case 'AbortError':
+                        errorMessage += 'Camera access aborted.';
+                        break;
+                    case 'TypeError':
+                        errorMessage += 'Invalid constraints.';
+                        break;
+                    default:
+                        errorMessage += error.message;
+                }
+                
+                console.error('Translation camera access error:', error);
+                showStatus(errorMessage, true);
+                alert(errorMessage);
+            }
+        });
+        
+        stopTranslationBtn.addEventListener('click', function() {
+            if (translationStream) {
+                translationStream.getTracks().forEach(track => track.stop());
+                translationWebcam.srcObject = null;
+                showStatus('Camera disconnected');
+            }
+        });
+    }
+
+    const speakBtn = document.getElementById('speakBtn');
+    const translatedText = document.getElementById('translatedText');
+    const textToSpeak = document.getElementById('textToSpeak');
+    const voiceSelector = document.getElementById('voiceSelector');
+    
+    // Map sign language codes to spoken language codes
+    function getSpokenLangCode(signLangCode) {
+        const mapping = {
+            'isl': 'hi', // Indian Sign Language → Hindi
+            'ben-sl': 'bn', // Bengali Sign Language → Bengali
+            'hin-sl': 'hi', // Hindi Sign Language → Hindi
+            'kan-sl': 'kn', // Kannada Sign Language → Kannada
+            'tam-sl': 'ta', // Tamil Sign Language → Tamil
+            'tel-sl': 'te', // Telugu Sign Language → Telugu
+            'mar-sl': 'mr' // Marathi Sign Language → Marathi
+        };
+        return mapping[signLangCode] || 'en'; // Default to English
+    }
+    
+    // Load and populate voices
+    let voices = [];
+    
+    function loadVoices() {
+        voices = speechSynthesis.getVoices();
+        if (voiceSelector) {
+            voiceSelector.innerHTML = '';
+            
+            // List of Indian language codes we want to show
+            const indianLangs = ['en', 'hi', 'bn', 'ta', 'te', 'kn', 'mr', 'gu', 'pa', 'or', 'as', 'ml'];
+            
+            // Filter voices: English OR any Indian language
+            const filteredVoices = voices.filter(voice => {
+                const langCode = voice.lang.toLowerCase();
+                return indianLangs.some(indLang => langCode.startsWith(indLang));
+            });
+            
+            if (filteredVoices.length === 0) {
+                voiceSelector.innerHTML = '<option value="">No Indian/English voices found</option>';
+            } else {
+                // Get the preferred spoken language for current selected sign language
+                const preferredLang = getSpokenLangCode(selectedLanguage);
+                
+                filteredVoices.forEach((voice, index) => {
+                    const option = document.createElement('option');
+                    const originalIndex = voices.indexOf(voice);
+                    option.value = originalIndex;
+                    option.textContent = `${voice.name} (${voice.lang})`;
+                    
+                    // Auto-select voice matching the preferred language
+                    if (voice.lang.toLowerCase().startsWith(preferredLang)) {
+                        option.selected = true;
+                    } else if (voice.lang.startsWith('en') && !voiceSelector.querySelector('[selected]')) {
+                        // Fallback to English if no matching language found
+                        option.selected = true;
+                    }
+                    
+                    voiceSelector.appendChild(option);
+                });
+            }
+        }
+    }
+    
+    // Some browsers load voices asynchronously
+    if ('speechSynthesis' in window) {
+        speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices(); // Try to load immediately
+    }
+    
+    if (speakBtn) {
+        speakBtn.addEventListener('click', function() {
+            // Use the textarea for input
+            const text = textToSpeak ? textToSpeak.value : (translatedText ? translatedText.textContent : 'Hello!');
+            
+            // Use browser's speech synthesis for better voices
+            if ('speechSynthesis' in window) {
+                // Cancel any ongoing speech
+                speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                
+                if (voiceSelector && voiceSelector.value !== '') {
+                    utterance.voice = voices[voiceSelector.value];
+                }
+                
+                speechSynthesis.speak(utterance);
+                console.log('Speaking:', text);
+            } else {
+                alert('Speech synthesis is not available in your browser.');
+            }
+        });
+    }
+});

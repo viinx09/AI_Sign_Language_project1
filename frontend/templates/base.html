@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Sign Language Translator{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SignAI">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">SignAI</a>
+            <div class="language-selector" style="margin-left: 1rem;">
+                <label for="languageSelect" style="color: white; margin-right: 0.5rem;">Language:</label>
+                <select id="languageSelect" style="padding: 0.5rem; border-radius: 4px; border: none;">
+                    <option value="isl">Indian Sign Language (ISL)</option>
+                    <option value="ben-sl">Bengali Sign Language</option>
+                    <option value="hin-sl">Hindi Sign Language</option>
+                    <option value="kan-sl">Kannada Sign Language</option>
+                    <option value="tam-sl">Tamil Sign Language</option>
+                    <option value="tel-sl">Telugu Sign Language</option>
+                    <option value="mar-sl">Marathi Sign Language</option>
+                </select>
+            </div>
+            <ul class="nav-links" style="margin-left: auto;">
+                <li><a href="/">Home</a></li>
+                <li><a href="/detection">Sign Detection</a></li>
+                <li><a href="/translation">Translation</a></li>
+                <li><a href="/dataset">Dataset</a></li>
+                <li><a href="/contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">
+        <p>&copy; 2026 AI Sign Language Project. All rights reserved.</p>
+    </footer>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
