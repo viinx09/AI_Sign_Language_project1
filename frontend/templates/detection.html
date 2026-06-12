@@ -7,6 +7,18 @@
     <h1>Sign Detection</h1>
     <div class="detection-container">
         <p id="status" class="status">Click "Start Camera" to begin</p>
+        
+        <!-- Permission help box -->
+        <div id="permissionHelp" class="feature-card" style="display: none; margin-bottom: 1rem; border: 1px solid #f39c12; background: #fff8e1;">
+            <h3 style="color: #f39c12;">📷 Camera Permission Needed</h3>
+            <p>If you denied camera access before, please follow these steps:</p>
+            <ol style="margin-left: 1.5rem; text-align: left;">
+                <li>Look for the camera icon in your browser's address bar</li>
+                <li>Click it and select "Always allow" or "Allow"</li>
+                <li>Refresh the page and try again</li>
+            </ol>
+        </div>
+        
         <div class="camera-select" style="margin-bottom: 1rem;">
             <label for="cameraSelect">Select Camera:</label>
             <select id="cameraSelect" style="padding: 0.5rem; border-radius: 4px; border: 1px solid #ddd; min-width: 200px;">

@@ -122,6 +122,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Get permission help element
+    const permissionHelp = document.getElementById('permissionHelp');
+    
     function showStatus(message, isError = false) {
         if (statusElement) {
             statusElement.textContent = message;
@@ -129,8 +132,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         console.log(message);
     }
+    
+    function showPermissionHelp(show) {
+        if (permissionHelp) {
+            permissionHelp.style.display = show ? 'block' : 'none';
+        }
+    }
 
-    async function loadCameras() {
+    async function loadCameras(askPermission = false) {
         if (!cameraSelect) return;
         
         try {
@@ -139,12 +148,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // Request permission first to get real camera names
-            try {
-                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                tempStream.getTracks().forEach(track => track.stop());
-            } catch (e) {
-                console.log('No temp stream permission not granted yet');
+            // Only request permission if explicitly asked (after user clicks start)
+            if (askPermission) {
+                try {
+                    const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    tempStream.getTracks().forEach(track => track.stop());
+                } catch (e) {
+                    console.log('Permission not granted yet');
+                }
             }
 
             const devices = await navigator.mediaDevices.enumerateDevices();
@@ -222,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Reload cameras to get labels now that we have permission
                 if (cameraSelect) {
-                    loadCameras();
+                    loadCameras(true);
                 }
             } catch (error) {
                 let errorMessage = 'Could not access camera: ';
@@ -230,24 +241,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 switch (error.name) {
                     case 'NotAllowedError':
                         errorMessage += 'Permission denied. Please allow camera access in your browser settings.';
+                        showPermissionHelp(true);
                         break;
                     case 'NotFoundError':
                         errorMessage += 'No camera found. Please connect a camera and try again.';
+                        showPermissionHelp(false);
                         break;
                     case 'NotReadableError':
                         errorMessage += 'Camera is already in use by another application.';
+                        showPermissionHelp(false);
                         break;
                     case 'OverconstrainedError':
                         errorMessage += 'No camera matches the requested constraints.';
+                        showPermissionHelp(false);
                         break;
                     case 'AbortError':
                         errorMessage += 'Camera access aborted.';
+                        showPermissionHelp(false);
                         break;
                     case 'TypeError':
                         errorMessage += 'Invalid constraints.';
+                        showPermissionHelp(false);
                         break;
                     default:
                         errorMessage += error.message;
+                        showPermissionHelp(false);
                 }
                 
                 console.error('Camera access error:', error);
@@ -302,24 +320,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 switch (error.name) {
                     case 'NotAllowedError':
                         errorMessage += 'Permission denied. Please allow camera access in your browser settings.';
+                        showPermissionHelp(true);
                         break;
                     case 'NotFoundError':
                         errorMessage += 'No camera found. Please connect a camera and try again.';
+                        showPermissionHelp(false);
                         break;
                     case 'NotReadableError':
                         errorMessage += 'Camera is already in use by another application.';
+                        showPermissionHelp(false);
                         break;
                     case 'OverconstrainedError':
                         errorMessage += 'No camera matches the requested constraints.';
+                        showPermissionHelp(false);
                         break;
                     case 'AbortError':
                         errorMessage += 'Camera access aborted.';
+                        showPermissionHelp(false);
                         break;
                     case 'TypeError':
                         errorMessage += 'Invalid constraints.';
+                        showPermissionHelp(false);
                         break;
                     default:
                         errorMessage += error.message;
+                        showPermissionHelp(false);
                 }
                 
                 console.error('Translation camera access error:', error);

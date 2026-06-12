@@ -7,6 +7,18 @@
     <h1>Real-Time Translation</h1>
     <div class="translation-container">
         <p id="status" class="status">Click "Start Camera" to begin</p>
+        
+        <!-- Permission help box -->
+        <div id="permissionHelp" class="feature-card" style="display: none; margin-bottom: 1rem; border: 1px solid #f39c12; background: #fff8e1;">
+            <h3 style="color: #f39c12;">📷 Camera Permission Needed</h3>
+            <p>If you denied camera access before, please follow these steps:</p>
+            <ol style="margin-left: 1.5rem; text-align: left;">
+                <li>Look for the camera icon in your browser's address bar</li>
+                <li>Click it and select "Always allow" or "Allow"</li>
+                <li>Refresh the page and try again</li>
+            </ol>
+        </div>
+        
         <div class="video-container">
             <video id="translationWebcam" autoplay playsinline style="width: 100%; max-width: 640px; border: 2px solid #3498db; border-radius: 8px;"></video>
         </div>
