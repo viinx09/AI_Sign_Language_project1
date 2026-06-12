@@ -2,33 +2,37 @@ from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS
 import sqlite3
 import os
-import pyttsx3
+import threading
 
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 CORS(app)
 
 DATABASE_PATH = '../database/sign_language.db'
 
-tts_engine = pyttsx3.init()
+# Don't initialize pyttsx3 here - it might cause issues; do it inside speak()
 
 def init_db():
     conn = sqlite3.connect(DATABASE_PATH)
     c = conn.cursor()
     
-    # Check if language column exists, if not, add it (migration)
-    c.execute("PRAGMA table_info(gestures)")
-    columns = [col[1] for col in c.fetchall()]
-    
-    if 'language' not in columns:
-        # Add language column if it doesn't exist
-        c.execute('ALTER TABLE gestures ADD COLUMN language TEXT DEFAULT "isl"')
-    
+    # Create the table first!
     c.execute('''CREATE TABLE IF NOT EXISTS gestures
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   gesture_name TEXT NOT NULL,
                   description TEXT,
                   language TEXT DEFAULT "isl",
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
+    # Now check if language column exists (in case table existed before without it)
+    c.execute("PRAGMA table_info(gestures)")
+    columns = [col[1] for col in c.fetchall()]
+    
+    if 'language' not in columns:
+        try:
+            c.execute('ALTER TABLE gestures ADD COLUMN language TEXT DEFAULT "isl"')
+        except Exception as e:
+            print(f"Note: Could not add language column: {e}")
+    
     conn.commit()
     conn.close()
 
@@ -84,33 +88,24 @@ def gestures():
     conn.close()
     return jsonify(gestures)
 
+def speak_text(text):
+    try:
+        import pyttsx3
+        engine = pyttsx3.init()
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+    except Exception as e:
+        print(f"TTS Error: {e}")
+
 @app.route('/api/speak', methods=['POST'])
 def speak():
     data = request.json
     text = data.get('text', '')
-    language = data.get('language', 'isl')
-    
-    # Map language codes to pyttsx3 voices (this may vary by system)
-    try:
-        voices = tts_engine.getProperty('voices')
-        
-        # Try to match language, fallback to default
-        selected_voice = None
-        for voice in voices:
-            if language in voice.languages[0].lower():
-                selected_voice = voice
-                break
-        
-        if selected_voice:
-            tts_engine.setProperty('voice', selected_voice.id)
-        
-        if text:
-            tts_engine.say(text)
-            tts_engine.runAndWait()
-            return jsonify({'success': True, 'message': 'Speech completed'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-    return jsonify({'success': False, 'message': 'No text provided'}), 400
+    if text:
+        # Run TTS in a separate thread to avoid blocking the server
+        threading.Thread(target=speak_text, args=(text,), daemon=True).start()
+    return jsonify({'success': True, 'message': f'Speech initiated: {text}'})
 
 @app.route('/api/languages', methods=['GET'])
 def get_languages():
