@@ -30,3 +30,10 @@ venv.bak/
 *~
 .DS_Store
 database/sign_language.db
+.vscode/
+bank.py
+complex.py
+countofwords.py
+sample.txt
+sortinlowesttohighest.py
+stopwatch.py
