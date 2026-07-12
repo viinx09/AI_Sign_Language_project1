@@ -274,9 +274,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         hands.setOptions({
             maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.5
+            modelComplexity: 0, // Lower complexity for better performance
+            minDetectionConfidence: 0.6, // Slightly lower for faster detection
+            minTrackingConfidence: 0.4
         });
 
         hands.onResults(onHandsResults);
@@ -291,9 +291,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         faceMesh.setOptions({
             maxNumFaces: 1,
-            refineLandmarks: true,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.5
+            refineLandmarks: false, // Disable refined landmarks for better performance
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.4
         });
 
         faceMesh.onResults(onFaceResults);
