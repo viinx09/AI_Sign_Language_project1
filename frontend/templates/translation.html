@@ -10,10 +10,10 @@
         
         <!-- Permission help box -->
         <div id="permissionHelp" class="feature-card" style="display: none; margin-bottom: 1rem; border: 1px solid #f39c12; background: #fff8e1;">
-            <h3 style="color: #f39c12;">📷 Camera Permission Needed</h3>
-            <p>If you denied camera access before, please follow these steps:</p>
+            <h3 style="color: #f39c12;">📷 Camera / Microphone Permission Needed</h3>
+            <p>If you denied access before, please follow these steps:</p>
             <ol style="margin-left: 1.5rem; text-align: left;">
-                <li>Look for the camera icon in your browser's address bar</li>
+                <li>Look for the camera/microphone icon in your browser's address bar</li>
                 <li>Click it and select "Always allow" or "Allow"</li>
                 <li>Refresh the page and try again</li>
             </ol>
@@ -27,13 +27,29 @@
             <button id="stopTranslationBtn" class="btn-secondary">Stop Camera</button>
         </div>
         <div class="translation-output">
-            <h3>Type Your Text:</h3>
-            <textarea id="textToSpeak" class="text-box" style="min-height: 80px;">Hello! This is a test of the translation system.</textarea>
+            <h3>Speech to Text:</h3>
+            <div class="controls" style="margin-bottom: 10px;">
+                <label style="margin-right: 10px;">Language:</label>
+                <select id="sttLanguage" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; margin-right: 10px;">
+                    <option value="en-IN">English (India)</option>
+                    <option value="hi-IN">Hindi (India)</option>
+                    <option value="bn-IN">Bengali (India)</option>
+                    <option value="ta-IN">Tamil (India)</option>
+                    <option value="te-IN">Telugu (India)</option>
+                    <option value="kn-IN">Kannada (India)</option>
+                    <option value="mr-IN">Marathi (India)</option>
+                </select>
+                <button id="startSTTBtn" class="btn-primary" style="background-color: #27ae60;">🎤 Start Listening</button>
+                <button id="stopSTTBtn" class="btn-secondary" style="display: none;">⏹️ Stop Listening</button>
+            </div>
+            <textarea id="textToSpeak" class="text-box" style="min-height: 80px;" placeholder="Speak something, or type here...">Hello! This is a test of the translation system.</textarea>
+            
             <div class="controls" style="margin-top: 10px;">
                 <label style="margin-right: 10px;">Select Voice:</label>
                 <select id="voiceSelector" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; margin-right: 10px;"></select>
                 <button id="speakBtn" class="btn-primary">Speak Text</button>
             </div>
+            
             <h3 style="margin-top: 30px;">Translated Text:</h3>
             <div id="translatedText" class="text-box" style="background-color: #f0f8ff;">Your sign language translations will appear here!</div>
         </div>

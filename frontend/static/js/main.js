@@ -363,6 +363,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const startTranslationBtn = document.getElementById('startTranslationBtn');
     const stopTranslationBtn = document.getElementById('stopTranslationBtn');
     const translationWebcam = document.getElementById('translationWebcam');
+    const startSTTBtn = document.getElementById('startSTTBtn');
+    const stopSTTBtn = document.getElementById('stopSTTBtn');
+    const sttLanguage = document.getElementById('sttLanguage');
     
     if (startTranslationBtn && stopTranslationBtn && translationWebcam) {
         let translationStream;
@@ -437,6 +440,76 @@ document.addEventListener('DOMContentLoaded', function() {
                 showStatus('Camera disconnected');
             }
         });
+    }
+
+    // === SPEECH TO TEXT ===
+    if (startSTTBtn && stopSTTBtn) {
+        let recognition;
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            startSTTBtn.disabled = true;
+            startSTTBtn.textContent = "Speech recognition not supported";
+            showStatus("Speech recognition not supported in this browser. Try Chrome/Edge.", true);
+        } else {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            
+            if (sttLanguage) {
+                recognition.lang = sttLanguage.value;
+                sttLanguage.addEventListener('change', function() {
+                    recognition.lang = this.value;
+                });
+            }
+            
+            recognition.onstart = function() {
+                startSTTBtn.style.display = "none";
+                stopSTTBtn.style.display = "inline-block";
+                showStatus("Listening... Speak now!");
+            };
+            
+            recognition.onresult = function(event) {
+                let transcript = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                if (textToSpeak) {
+                    textToSpeak.value = transcript;
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                console.error("Speech recognition error:", event.error);
+                let errorMsg = "Speech recognition error: ";
+                switch(event.error) {
+                    case 'not-allowed':
+                        errorMsg += "Microphone permission denied. Please allow microphone access.";
+                        showPermissionHelp(true);
+                        break;
+                    case 'no-speech':
+                        errorMsg += "No speech detected.";
+                        break;
+                    default:
+                        errorMsg += event.error;
+                }
+                showStatus(errorMsg, true);
+            };
+            
+            recognition.onend = function() {
+                startSTTBtn.style.display = "inline-block";
+                stopSTTBtn.style.display = "none";
+                showStatus("Stopped listening");
+            };
+            
+            startSTTBtn.addEventListener('click', function() {
+                recognition.start();
+            });
+            
+            stopSTTBtn.addEventListener('click', function() {
+                recognition.stop();
+            });
+        }
     }
 
     const speakBtn = document.getElementById('speakBtn');
