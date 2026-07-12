@@ -41,8 +41,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-if not os.path.exists('../database'):
-    os.makedirs('../database')
+database_dir = os.path.join(PROJECT_ROOT, 'database')
+if not os.path.exists(database_dir):
+    os.makedirs(database_dir)
 init_db()
 
 @app.route('/')
