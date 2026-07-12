@@ -284,7 +284,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (trainingData.length > 0) {
                     const predictedSign = knnClassify(flatLandmarks);
                     if (detectedText && predictedSign) {
-                        detectedText.textContent = predictedSign;
+                        // Only speak if the sign is different from last spoken
+                        if (detectedText.textContent !== predictedSign) {
+                            detectedText.textContent = predictedSign;
+                            // Speak the detected sign
+                            if ('speechSynthesis' in window) {
+                                speechSynthesis.cancel();
+                                const utterance = new SpeechSynthesisUtterance(predictedSign);
+                                utterance.rate = 0.9;
+                                speechSynthesis.speak(utterance);
+                            }
+                        }
                     }
                 }
             }
