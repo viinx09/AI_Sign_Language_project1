@@ -197,10 +197,53 @@ document.addEventListener('DOMContentLoaded', function() {
     const webcam = document.getElementById('webcam');
     const canvas = document.getElementById('canvas');
     const detectedText = document.getElementById('detectedText');
+    const signNameInput = document.getElementById('signName');
+    const recordBtn = document.getElementById('recordBtn');
+    const stopRecordBtn = document.getElementById('stopRecordBtn');
+    const recordStatus = document.getElementById('recordStatus');
     
     let hands;
     let camera;
     let stream;
+    let isRecording = false;
+    let currentSignData = [];
+    let trainingData = []; // Array of {label: string, landmarks: number[]}
+
+    // Simple KNN Classifier
+    function euclideanDistance(a, b) {
+        return Math.sqrt(a.reduce((sum, val, i) => sum + Math.pow(val - b[i], 2), 0));
+    }
+
+    function knnClassify(landmarks, k = 5) {
+        if (trainingData.length === 0) return null;
+        
+        const distances = trainingData.map((data, index) => ({
+            index,
+            distance: euclideanDistance(landmarks, data.landmarks),
+            label: data.label
+        })).sort((a, b) => a.distance - b.distance);
+        
+        const neighbors = distances.slice(0, k);
+        const labelCounts = {};
+        neighbors.forEach(n => {
+            labelCounts[n.label] = (labelCounts[n.label] || 0) + 1;
+        });
+        
+        let maxCount = 0;
+        let predictedLabel = null;
+        for (const label in labelCounts) {
+            if (labelCounts[label] > maxCount) {
+                maxCount = labelCounts[label];
+                predictedLabel = label;
+            }
+        }
+        return predictedLabel;
+    }
+
+    // Flatten landmarks to a 1D array
+    function flattenLandmarks(landmarks) {
+        return landmarks.flatMap(lm => [lm.x, lm.y, lm.z]);
+    }
 
     async function initializeHands() {
         hands = new Hands({
@@ -232,11 +275,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Draw hand landmarks
                 drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
                 drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+                
+                // Collect data or classify
+                const flatLandmarks = flattenLandmarks(landmarks);
+                if (isRecording && signNameInput.value) {
+                    currentSignData.push(flatLandmarks);
+                    if (recordStatus) recordStatus.textContent = `Recorded ${currentSignData.length} samples...`;
+                } else if (trainingData.length > 0) {
+                    const predictedSign = knnClassify(flatLandmarks);
+                    if (detectedText && predictedSign) {
+                        detectedText.textContent = predictedSign;
+                    }
+                }
             }
             
-            // Update detected text
-            if (detectedText) {
-                detectedText.textContent = `Hand${results.multiHandLandmarks.length > 1 ? 's' : ''} detected!`;
+            if (!isRecording && trainingData.length === 0) {
+                if (detectedText) {
+                    detectedText.textContent = `Hand${results.multiHandLandmarks.length > 1 ? 's' : ''} detected! Collect data to start recognition.`;
+                }
             }
         } else {
             if (detectedText) {
@@ -245,6 +301,48 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         canvasCtx.restore();
+    }
+    
+    // Data Collection Controls
+    if (recordBtn && stopRecordBtn) {
+        recordBtn.addEventListener('click', () => {
+            if (!signNameInput.value) {
+                alert('Please enter a sign name first!');
+                return;
+            }
+            isRecording = true;
+            currentSignData = [];
+            recordBtn.style.display = 'none';
+            stopRecordBtn.style.display = 'inline-block';
+            if (recordStatus) recordStatus.textContent = 'Recording... Make the sign!';
+        });
+        
+        stopRecordBtn.addEventListener('click', () => {
+            isRecording = false;
+            stopRecordBtn.style.display = 'none';
+            recordBtn.style.display = 'inline-block';
+            
+            if (currentSignData.length > 0) {
+                // Add recorded data to training set
+                const label = signNameInput.value;
+                currentSignData.forEach(landmarks => {
+                    trainingData.push({ label, landmarks });
+                });
+                if (recordStatus) recordStatus.textContent = `Saved ${currentSignData.length} samples for "${label}"! Total training data: ${trainingData.length}`;
+                
+                // Save to localStorage
+                localStorage.setItem('signTrainingData', JSON.stringify(trainingData));
+            } else {
+                if (recordStatus) recordStatus.textContent = 'No data recorded!';
+            }
+        });
+        
+        // Load saved training data on page load
+        const savedData = localStorage.getItem('signTrainingData');
+        if (savedData) {
+            trainingData = JSON.parse(savedData);
+            if (recordStatus) recordStatus.textContent = `Loaded ${trainingData.length} training samples!`;
+        }
     }
 
     if (startBtn && stopBtn && webcam && canvas) {
