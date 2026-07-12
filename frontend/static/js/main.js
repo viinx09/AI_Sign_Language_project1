@@ -203,7 +203,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const stopRecordBtn = document.getElementById('stopRecordBtn');
     const recordStatus = document.getElementById('recordStatus');
     const toggleHandOnly = document.getElementById('toggleHandOnly');
-    const toggleHandFace = document.getElementById('toggleHandFace');
+    const toggleFaceOnly = document.getElementById('toggleFaceOnly');
+    const toggleBoth = document.getElementById('toggleBoth');
     
     let hands;
     let faceMesh;
@@ -212,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isRecording = false;
     let currentSignData = [];
     let trainingData = []; // Array of {label: string, landmarks: number[]}
-    let detectFace = true;
+    let detectionMode = 'both'; // 'hands', 'face', or 'both'
     let lastHandResults = null;
     let lastFaceResults = null;
     let frameScheduled = false;
@@ -371,15 +372,15 @@ document.addEventListener('DOMContentLoaded', function() {
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw the video frame from last hand results (or face results if hands not available)
+        // Draw the video frame
         if (lastHandResults && lastHandResults.image) {
             canvasCtx.drawImage(lastHandResults.image, 0, 0, canvas.width, canvas.height);
         } else if (lastFaceResults && lastFaceResults.image) {
             canvasCtx.drawImage(lastFaceResults.image, 0, 0, canvas.width, canvas.height);
         }
 
-        // Draw hand landmarks
-        if (lastHandResults && lastHandResults.multiHandLandmarks) {
+        // Draw hand landmarks if in hands or both mode
+        if ((detectionMode === 'hands' || detectionMode === 'both') && lastHandResults && lastHandResults.multiHandLandmarks) {
             for (const landmarks of lastHandResults.multiHandLandmarks) {
                 drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
                 drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
@@ -412,14 +413,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     detectedText.textContent = `Hand${lastHandResults.multiHandLandmarks.length > 1 ? 's' : ''} detected! Collect data to start recognition.`;
                 }
             }
-        } else {
+        } else if (detectionMode === 'hands') {
             if (detectedText && !isRecording) {
-                detectedText.textContent = 'Waiting for detection...';
+                detectedText.textContent = 'Waiting for hands...';
             }
         }
 
-        // Draw face landmarks
-        if (lastFaceResults && lastFaceResults.multiFaceLandmarks) {
+        // Draw face landmarks if in face or both mode
+        if ((detectionMode === 'face' || detectionMode === 'both') && lastFaceResults && lastFaceResults.multiFaceLandmarks) {
             for (const landmarks of lastFaceResults.multiFaceLandmarks) {
                 drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
                 drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
@@ -487,7 +488,29 @@ document.addEventListener('DOMContentLoaded', function() {
         trainingData = [...preLoadedSigns, ...initialTrainingData];
     }
 
-
+    // Detection mode toggles
+    if (toggleHandOnly && toggleFaceOnly && toggleBoth) {
+        toggleHandOnly.addEventListener('click', () => {
+            detectionMode = 'hands';
+            toggleHandOnly.className = 'btn-primary';
+            toggleFaceOnly.className = 'btn-secondary';
+            toggleBoth.className = 'btn-secondary';
+        });
+        
+        toggleFaceOnly.addEventListener('click', () => {
+            detectionMode = 'face';
+            toggleHandOnly.className = 'btn-secondary';
+            toggleFaceOnly.className = 'btn-primary';
+            toggleBoth.className = 'btn-secondary';
+        });
+        
+        toggleBoth.addEventListener('click', () => {
+            detectionMode = 'both';
+            toggleHandOnly.className = 'btn-secondary';
+            toggleFaceOnly.className = 'btn-secondary';
+            toggleBoth.className = 'btn-primary';
+        });
+    }
 
     if (startBtn && stopBtn && webcam && canvas) {
         initializeHands();
@@ -531,11 +554,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Initialize camera utility
                     camera = new Camera(webcam, {
                         onFrame: async () => {
-                            // Send to both models in parallel for better performance
-                            await Promise.all([
-                                hands.send({ image: webcam }),
-                                faceMesh.send({ image: webcam })
-                            ]);
+                            const tasks = [];
+                            if (detectionMode === 'hands' || detectionMode === 'both') {
+                                tasks.push(hands.send({ image: webcam }));
+                            }
+                            if (detectionMode === 'face' || detectionMode === 'both') {
+                                tasks.push(faceMesh.send({ image: webcam }));
+                            }
+                            await Promise.all(tasks);
                         },
                         width: 640,
                         height: 480
