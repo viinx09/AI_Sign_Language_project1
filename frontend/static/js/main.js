@@ -197,17 +197,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const webcam = document.getElementById('webcam');
     const canvas = document.getElementById('canvas');
     const detectedText = document.getElementById('detectedText');
+    const detectedFacial = document.getElementById('detectedFacial');
     const signNameInput = document.getElementById('signName');
     const recordBtn = document.getElementById('recordBtn');
     const stopRecordBtn = document.getElementById('stopRecordBtn');
     const recordStatus = document.getElementById('recordStatus');
+    const toggleHandOnly = document.getElementById('toggleHandOnly');
+    const toggleHandFace = document.getElementById('toggleHandFace');
     
     let hands;
+    let faceMesh;
     let camera;
     let stream;
     let isRecording = false;
     let currentSignData = [];
     let trainingData = []; // Array of {label: string, landmarks: number[]}
+    let detectFace = true;
+    let lastHandResults = null;
+    let lastFaceResults = null;
+    
+    // Facial landmark indices for expressions
+    const TOP_LIP = 13;
+    const BOTTOM_LIP = 14;
+    const LEFT_EYE_TOP = 386;
+    const LEFT_EYE_BOTTOM = 374;
+    const RIGHT_EYE_TOP = 159;
+    const RIGHT_EYE_BOTTOM = 145;
+    const LEFT_BROW_INNER = 285;
+    const RIGHT_BROW_INNER = 52;
+    const LEFT_BROW_OUTER = 336;
+    const RIGHT_BROW_OUTER = 105;
 
     // Simple KNN Classifier
     function euclideanDistance(a, b) {
@@ -262,17 +281,95 @@ document.addEventListener('DOMContentLoaded', function() {
         hands.onResults(onHandsResults);
     }
 
+    async function initializeFaceMesh() {
+        faceMesh = new FaceMesh({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+            }
+        });
+
+        faceMesh.setOptions({
+            maxNumFaces: 1,
+            refineLandmarks: true,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5
+        });
+
+        faceMesh.onResults(onFaceResults);
+    }
+
+    function detectFacialExpression(landmarks) {
+        // Calculate mouth openness
+        const topLip = landmarks[TOP_LIP];
+        const bottomLip = landmarks[BOTTOM_LIP];
+        const mouthOpenness = Math.abs(topLip.y - bottomLip.y);
+        
+        // Calculate eye openness
+        const leftEyeTop = landmarks[LEFT_EYE_TOP];
+        const leftEyeBottom = landmarks[LEFT_EYE_BOTTOM];
+        const rightEyeTop = landmarks[RIGHT_EYE_TOP];
+        const rightEyeBottom = landmarks[RIGHT_EYE_BOTTOM];
+        const leftEyeOpenness = Math.abs(leftEyeTop.y - leftEyeBottom.y);
+        const rightEyeOpenness = Math.abs(rightEyeTop.y - rightEyeBottom.y);
+        const avgEyeOpenness = (leftEyeOpenness + rightEyeOpenness) / 2;
+        
+        // Calculate eyebrow position
+        const leftBrowInner = landmarks[LEFT_BROW_INNER];
+        const rightBrowInner = landmarks[RIGHT_BROW_INNER];
+        const leftBrowOuter = landmarks[LEFT_BROW_OUTER];
+        const rightBrowOuter = landmarks[RIGHT_BROW_OUTER];
+        const avgBrowY = (leftBrowInner.y + rightBrowInner.y + leftBrowOuter.y + rightBrowOuter.y) / 4;
+        
+        // Simple expression detection (thresholds are approximate, can be tuned)
+        if (mouthOpenness > 0.08 && avgEyeOpenness > 0.03) {
+            return 'Surprised 😲';
+        } else if (mouthOpenness > 0.05 && avgEyeOpenness < 0.025) {
+            return 'Happy 😊';
+        } else if (avgBrowY < 0.3 && mouthOpenness < 0.03) {
+            return 'Angry 😠';
+        } else if (avgBrowY > 0.35 && mouthOpenness < 0.03) {
+            return 'Sad 😢';
+        } else {
+            return 'Neutral 😐';
+        }
+    }
+
     function onHandsResults(results) {
+        lastHandResults = results;
+        renderCanvas();
+    }
+
+    function onFaceResults(results) {
+        lastFaceResults = results;
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            const expression = detectFacialExpression(results.multiFaceLandmarks[0]);
+            if (detectedFacial) {
+                detectedFacial.textContent = expression;
+            }
+        } else {
+            if (detectedFacial) {
+                detectedFacial.textContent = 'Waiting for face...';
+            }
+        }
+        renderCanvas();
+    }
+
+    function renderCanvas() {
+        if (!canvas) return;
         const canvasCtx = canvas.getContext('2d');
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw the video frame
-        canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+        // Draw the video frame from last hand results (or face results if hands not available)
+        if (lastHandResults && lastHandResults.image) {
+            canvasCtx.drawImage(lastHandResults.image, 0, 0, canvas.width, canvas.height);
+        } else if (lastFaceResults && lastFaceResults.image) {
+            canvasCtx.drawImage(lastFaceResults.image, 0, 0, canvas.width, canvas.height);
+        }
 
-        if (results.multiHandLandmarks) {
-            for (const landmarks of results.multiHandLandmarks) {
-                // Draw hand landmarks
+        // Draw hand landmarks
+        if (lastHandResults && lastHandResults.multiHandLandmarks) {
+            for (const landmarks of lastHandResults.multiHandLandmarks) {
                 drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
                 drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
                 
@@ -299,14 +396,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            if (!isRecording && trainingData.length === 0) {
+            if (!isRecording && trainingData.length === 0 && lastHandResults.multiHandLandmarks.length > 0) {
                 if (detectedText) {
-                    detectedText.textContent = `Hand${results.multiHandLandmarks.length > 1 ? 's' : ''} detected! Collect data to start recognition.`;
+                    detectedText.textContent = `Hand${lastHandResults.multiHandLandmarks.length > 1 ? 's' : ''} detected! Collect data to start recognition.`;
                 }
             }
         } else {
-            if (detectedText) {
+            if (detectedText && !isRecording) {
                 detectedText.textContent = 'Waiting for detection...';
+            }
+        }
+
+        // Draw face landmarks
+        if (lastFaceResults && lastFaceResults.multiFaceLandmarks) {
+            for (const landmarks of lastFaceResults.multiFaceLandmarks) {
+                drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
+                drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYEBROW, { color: '#FF3030' });
+                drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
+                drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYEBROW, { color: '#30FF30' });
+                drawConnectors(canvasCtx, landmarks, FACEMESH_FACE_OVAL, { color: '#E0E0E0' });
+                drawConnectors(canvasCtx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
             }
         }
 
@@ -366,8 +476,11 @@ document.addEventListener('DOMContentLoaded', function() {
         trainingData = [...preLoadedSigns, ...initialTrainingData];
     }
 
+
+
     if (startBtn && stopBtn && webcam && canvas) {
         initializeHands();
+        initializeFaceMesh();
         
         startBtn.addEventListener('click', async function() {
             try {
@@ -408,6 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     camera = new Camera(webcam, {
                         onFrame: async () => {
                             await hands.send({ image: webcam });
+                            await faceMesh.send({ image: webcam });
                         },
                         width: 640,
                         height: 480
