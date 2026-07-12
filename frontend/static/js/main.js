@@ -513,6 +513,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const speakBtn = document.getElementById('speakBtn');
+    const clearBtn = document.getElementById('clearBtn');
     const translatedText = document.getElementById('translatedText');
     const textToSpeak = document.getElementById('textToSpeak');
     const voiceSelector = document.getElementById('voiceSelector');
@@ -602,6 +603,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Speaking:', text);
             } else {
                 alert('Speech synthesis is not available in your browser.');
+            }
+        });
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            if (textToSpeak) {
+                textToSpeak.value = '';
+            }
+            if (translatedText) {
+                translatedText.textContent = 'Your sign language translations will appear here!';
             }
         });
     }
