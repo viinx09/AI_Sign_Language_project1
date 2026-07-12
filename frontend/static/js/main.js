@@ -191,12 +191,64 @@ document.addEventListener('DOMContentLoaded', function() {
         refreshCamerasBtn.addEventListener('click', loadCameras);
     }
 
+    // === SIGN DETECTION WITH MEDIAPIPE ===
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const webcam = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const detectedText = document.getElementById('detectedText');
     
-    if (startBtn && stopBtn && webcam) {
-        let stream;
+    let hands;
+    let camera;
+    let stream;
+
+    async function initializeHands() {
+        hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onHandsResults);
+    }
+
+    function onHandsResults(results) {
+        const canvasCtx = canvas.getContext('2d');
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw the video frame
+        canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+        if (results.multiHandLandmarks) {
+            for (const landmarks of results.multiHandLandmarks) {
+                // Draw hand landmarks
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+                drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+            }
+            
+            // Update detected text
+            if (detectedText) {
+                detectedText.textContent = `Hand${results.multiHandLandmarks.length > 1 ? 's' : ''} detected!`;
+            }
+        } else {
+            if (detectedText) {
+                detectedText.textContent = 'Waiting for detection...';
+            }
+        }
+
+        canvasCtx.restore();
+    }
+
+    if (startBtn && stopBtn && webcam && canvas) {
+        initializeHands();
         
         startBtn.addEventListener('click', async function() {
             try {
@@ -224,11 +276,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 webcam.srcObject = stream;
-                showStatus('Camera connected successfully!');
+                showStatus('Camera connected! Initializing detection...');
                 
-                webcam.onloadedmetadata = () => {
+                webcam.onloadedmetadata = async () => {
                     webcam.play();
-                    showStatus('Camera is streaming');
+                    
+                    // Set canvas size to match video
+                    canvas.width = webcam.videoWidth;
+                    canvas.height = webcam.videoHeight;
+                    
+                    // Initialize camera utility
+                    camera = new Camera(webcam, {
+                        onFrame: async () => {
+                            await hands.send({ image: webcam });
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    
+                    await camera.start();
+                    showStatus('Detection active! Show your hands!');
                 };
                 
                 // Reload cameras to get labels now that we have permission
@@ -275,9 +342,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         stopBtn.addEventListener('click', function() {
+            if (camera) {
+                camera.stop();
+                camera = null;
+            }
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 webcam.srcObject = null;
+                // Clear canvas
+                const canvasCtx = canvas.getContext('2d');
+                canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+                if (detectedText) {
+                    detectedText.textContent = 'Waiting for detection...';
+                }
                 showStatus('Camera disconnected');
             }
         });

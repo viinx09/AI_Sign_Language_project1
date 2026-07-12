@@ -4,10 +4,15 @@ import sqlite3
 import os
 import threading
 
-app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
+# Get the directory of the current file (app.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+
+app = Flask(__name__, template_folder=os.path.join(PROJECT_ROOT, 'frontend', 'templates'), 
+            static_folder=os.path.join(PROJECT_ROOT, 'frontend', 'static'))
 CORS(app)
 
-DATABASE_PATH = '../database/sign_language.db'
+DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'sign_language.db')
 
 # Don't initialize pyttsx3 here - it might cause issues; do it inside speak()
 
