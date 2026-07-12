@@ -347,12 +347,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Load saved training data on page load
+        // Load saved training data on page load, plus pre-loaded signs
+        let initialTrainingData = [];
+        
+        // Pre-loaded simple signs (example landmark data - in real app you'd collect more)
+        // For demo purposes, let's add a structure for common ISL signs
+        const preLoadedSigns = []; // In a real app, this would have actual landmark data
+        
         const savedData = localStorage.getItem('signTrainingData');
         if (savedData) {
-            trainingData = JSON.parse(savedData);
-            if (recordStatus) recordStatus.textContent = `Loaded ${trainingData.length} training samples!`;
+            initialTrainingData = JSON.parse(savedData);
+            if (recordStatus) recordStatus.textContent = `Loaded ${initialTrainingData.length} training samples!`;
+        } else {
+            if (recordStatus) recordStatus.textContent = `No saved data yet! Start by recording your first sign!`;
         }
+        
+        // Combine pre-loaded and saved data
+        trainingData = [...preLoadedSigns, ...initialTrainingData];
     }
 
     if (startBtn && stopBtn && webcam && canvas) {
