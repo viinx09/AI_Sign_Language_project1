@@ -215,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let detectFace = true;
     let lastHandResults = null;
     let lastFaceResults = null;
+    let frameScheduled = false;
     
     // Facial landmark indices for expressions
     const TOP_LIP = 13;
@@ -336,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function onHandsResults(results) {
         lastHandResults = results;
-        renderCanvas();
+        scheduleRender();
     }
 
     function onFaceResults(results) {
@@ -351,7 +352,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 detectedFacial.textContent = 'Waiting for face...';
             }
         }
-        renderCanvas();
+        scheduleRender();
+    }
+
+    function scheduleRender() {
+        if (!frameScheduled) {
+            frameScheduled = true;
+            requestAnimationFrame(() => {
+                renderCanvas();
+                frameScheduled = false;
+            });
+        }
     }
 
     function renderCanvas() {
@@ -520,8 +531,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Initialize camera utility
                     camera = new Camera(webcam, {
                         onFrame: async () => {
-                            await hands.send({ image: webcam });
-                            await faceMesh.send({ image: webcam });
+                            // Send to both models in parallel for better performance
+                            await Promise.all([
+                                hands.send({ image: webcam }),
+                                faceMesh.send({ image: webcam })
+                            ]);
                         },
                         width: 640,
                         height: 480
