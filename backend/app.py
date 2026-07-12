@@ -8,8 +8,15 @@ import threading
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
+# Debug: print paths
+print(f"BASE_DIR: {BASE_DIR}")
+print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+print(f"Template folder: {os.path.join(PROJECT_ROOT, 'frontend', 'templates')}")
+print(f"Static folder: {os.path.join(PROJECT_ROOT, 'frontend', 'static')}")
+
 app = Flask(__name__, template_folder=os.path.join(PROJECT_ROOT, 'frontend', 'templates'), 
-            static_folder=os.path.join(PROJECT_ROOT, 'frontend', 'static'))
+            static_folder=os.path.join(PROJECT_ROOT, 'frontend', 'static'),
+            static_url_path='/static')
 CORS(app)
 
 DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'sign_language.db')
