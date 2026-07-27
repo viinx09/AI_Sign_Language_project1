@@ -12,30 +12,61 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Store selected language, default to 'isl' (Indian Sign Language)
     let selectedLanguage = localStorage.getItem('selectedLanguage') || 'isl';
     
+    function trainingStorageKey(lang) {
+        return `signTrainingData_${lang || selectedLanguage}`;
+    }
+
+    function loadTrainingDataForLanguage(lang) {
+        const key = trainingStorageKey(lang);
+        const savedData = localStorage.getItem(key);
+        let loaded = [];
+        if (savedData) {
+            try { loaded = JSON.parse(savedData); } catch (e) { loaded = []; }
+        }
+        trainingData = loaded;
+        renderTrainingHistory();
+        if (recordStatus) {
+            if (loaded.length > 0) {
+                recordStatus.textContent = `Loaded ${loaded.length} training samples for ${getLanguageName(lang || selectedLanguage)}!`;
+            } else {
+                recordStatus.textContent = `No saved data yet for ${getLanguageName(lang || selectedLanguage)}. Start recording!`;
+            }
+        }
+        return loaded;
+    }
+
+    function saveTrainingDataForLanguage() {
+        localStorage.setItem(trainingStorageKey(selectedLanguage), JSON.stringify(trainingData));
+    }
+
+    function onSelectedLanguageChanged(newLang) {
+        selectedLanguage = newLang;
+        localStorage.setItem('selectedLanguage', selectedLanguage);
+        if (gestureList) loadGestures();
+        loadVoices();
+        if (typeof renderTrainingHistory === 'function') {
+            loadTrainingDataForLanguage(selectedLanguage);
+        }
+        if (gestureLanguage) gestureLanguage.value = selectedLanguage;
+        if (filterLanguage) filterLanguage.value = selectedLanguage;
+        showStatus(`Switched to ${getLanguageName(selectedLanguage)}`);
+    }
+
     // Initialize language selector if present
     if (languageSelect) {
         languageSelect.value = selectedLanguage;
-        
+
         languageSelect.addEventListener('change', function() {
-            selectedLanguage = this.value;
-            localStorage.setItem('selectedLanguage', selectedLanguage);
-            // Reload gestures if on dataset page
-            if (gestureList) {
-                loadGestures();
-            }
-            // Reload voices to auto-select matching voice
-            loadVoices();
+            onSelectedLanguageChanged(this.value);
         });
     }
     
     // Initialize filter language if present
     if (filterLanguage) {
         filterLanguage.value = selectedLanguage;
-        
+
         filterLanguage.addEventListener('change', function() {
-            selectedLanguage = this.value;
-            localStorage.setItem('selectedLanguage', selectedLanguage);
-            loadGestures();
+            onSelectedLanguageChanged(this.value);
         });
     }
     
@@ -330,12 +361,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (clearTrainingHistoryBtn) {
         clearTrainingHistoryBtn.style.cursor = 'pointer';
         clearTrainingHistoryBtn.addEventListener('click', () => {
-            if (confirm('Delete ALL recorded training signs? This cannot be undone.')) {
+            if (confirm(`Delete ALL recorded signs for ${getLanguageName(selectedLanguage)}? This cannot be undone.`)) {
                 trainingData = [];
-                localStorage.removeItem('signTrainingData');
+                localStorage.removeItem(trainingStorageKey(selectedLanguage));
                 renderTrainingHistory();
-                if (recordStatus) recordStatus.textContent = 'No saved data yet! Start by recording your first sign!';
-                showStatus('All recorded training signs deleted');
+                if (recordStatus) recordStatus.textContent = `No saved data yet for ${getLanguageName(selectedLanguage)}. Start recording!`;
+                showStatus(`All recorded signs for ${getLanguageName(selectedLanguage)} deleted`);
             }
         });
     }
@@ -557,6 +588,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                                     speechSynthesis.cancel();
                                     const utterance = new SpeechSynthesisUtterance(predictedSign);
                                     utterance.rate = 0.9;
+                                    const prefLang = getSpokenLangCode(selectedLanguage);
+                                    if (voiceSelector && voiceSelector.value !== '') {
+                                        utterance.voice = voices[voiceSelector.value];
+                                    } else {
+                                        const matching = voices.find(v => v.lang.toLowerCase().startsWith(prefLang));
+                                        if (matching) utterance.voice = matching;
+                                        if (matching) utterance.lang = matching.lang;
+                                    }
                                     speechSynthesis.speak(utterance);
                                 } catch (e) {
                                     console.warn('Speech error:', e);
@@ -602,6 +641,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Data Collection Controls
     if (recordBtn && stopRecordBtn) {
+        recordBtn.style.cursor = 'pointer';
+        stopRecordBtn.style.cursor = 'pointer';
+
         recordBtn.addEventListener('click', () => {
             if (!signNameInput.value) {
                 alert('Please enter a sign name first!');
@@ -626,30 +668,16 @@ document.addEventListener('DOMContentLoaded', async function() {
                 });
                 if (recordStatus) recordStatus.textContent = `Saved ${currentSignData.length} samples for "${label}"! Total training data: ${trainingData.length}`;
                 
-                localStorage.setItem('signTrainingData', JSON.stringify(trainingData));
+                saveTrainingDataForLanguage();
                 renderTrainingHistory();
             } else {
                 if (recordStatus) recordStatus.textContent = 'No data recorded!';
             }
         });
         
-        // Load saved training data on page load, plus pre-loaded signs
-        let initialTrainingData = [];
-        
-        // Pre-loaded simple signs (example landmark data - in real app you'd collect more)
-        // For demo purposes, let's add a structure for common ISL signs
-        const preLoadedSigns = []; // In a real app, this would have actual landmark data
-        
-        const savedData = localStorage.getItem('signTrainingData');
-        if (savedData) {
-            initialTrainingData = JSON.parse(savedData);
-            if (recordStatus) recordStatus.textContent = `Loaded ${initialTrainingData.length} training samples!`;
-        } else {
-            if (recordStatus) recordStatus.textContent = `No saved data yet! Start by recording your first sign!`;
-        }
-        
-        // Combine pre-loaded and saved data
-        trainingData = [...preLoadedSigns, ...initialTrainingData];
+        const preLoadedSigns = [];
+        const loadedData = loadTrainingDataForLanguage(selectedLanguage);
+        trainingData = [...preLoadedSigns, ...loadedData];
         renderTrainingHistory();
     }
 
@@ -867,23 +895,159 @@ document.addEventListener('DOMContentLoaded', async function() {
     const startTranslationBtn = document.getElementById('startTranslationBtn');
     const stopTranslationBtn = document.getElementById('stopTranslationBtn');
     const translationWebcam = document.getElementById('translationWebcam');
+    const translationCanvas = document.getElementById('translationCanvas');
     const startSTTBtn = document.getElementById('startSTTBtn');
     const stopSTTBtn = document.getElementById('stopSTTBtn');
     const sttLanguage = document.getElementById('sttLanguage');
-    
+
+    let translationHands;
+    let translationFaceMesh;
+    let translationCamera;
+    let transLastHandResults = null;
+    let transLastFaceResults = null;
+    let transLastSign = '';
+    let transLastSignTime = 0;
+    let transAnimationId = null;
+    let transLastFrameTime = 0;
+    let isTransCameraActive = false;
+    const TRANS_FRAME_INTERVAL = 1000 / 30;
+
+    async function ensureTranslationMediaPipe() {
+        if (typeof Hands === 'undefined' || typeof FaceMesh === 'undefined' || typeof Camera === 'undefined') {
+            return false;
+        }
+        try {
+            if (!translationHands) {
+                translationHands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+                translationHands.setOptions({
+                    maxNumHands: 2,
+                    modelComplexity: 0,
+                    minDetectionConfidence: 0.6,
+                    minTrackingConfidence: 0.4
+                });
+                translationHands.onResults((r) => { transLastHandResults = r; scheduleTransRender(); });
+            }
+            if (!translationFaceMesh) {
+                translationFaceMesh = new FaceMesh({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+                });
+                translationFaceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: false,
+                    minDetectionConfidence: 0.6,
+                    minTrackingConfidence: 0.4
+                });
+                translationFaceMesh.onResults((r) => { transLastFaceResults = r; scheduleTransRender(); });
+            }
+            return true;
+        } catch (e) {
+            console.warn('Translation MediaPipe init failed:', e);
+            return false;
+        }
+    }
+
+    let transFrameScheduled = false;
+    function scheduleTransRender() {
+        if (!transFrameScheduled && !isTransCameraActive) {
+            transFrameScheduled = true;
+            requestAnimationFrame(() => { renderTranslationCanvas(); transFrameScheduled = false; });
+        }
+    }
+
+    function continuousTransPreviewLoop(timestamp) {
+        if (!isTransCameraActive) return;
+        transAnimationId = requestAnimationFrame(continuousTransPreviewLoop);
+        const elapsed = timestamp - transLastFrameTime;
+        if (elapsed < TRANS_FRAME_INTERVAL) return;
+        transLastFrameTime = timestamp - (elapsed % TRANS_FRAME_INTERVAL);
+        renderTranslationCanvas();
+    }
+
+    function renderTranslationCanvas() {
+        if (!translationCanvas) return;
+        const tCtx = translationCanvas.getContext('2d');
+        tCtx.save();
+        tCtx.clearRect(0, 0, translationCanvas.width, translationCanvas.height);
+        if (translationWebcam && translationWebcam.readyState === 4) {
+            tCtx.drawImage(translationWebcam, 0, 0, translationCanvas.width, translationCanvas.height);
+        }
+        const hasDraw = typeof drawConnectors !== 'undefined' && typeof drawLandmarks !== 'undefined';
+        const hasHandConns = typeof HAND_CONNECTIONS !== 'undefined';
+        const hasFaceMesh = typeof FACEMESH_TESSELATION !== 'undefined';
+        if (transLastHandResults && transLastHandResults.multiHandLandmarks) {
+            for (const landmarks of transLastHandResults.multiHandLandmarks) {
+                if (hasDraw && hasHandConns) {
+                    try {
+                        drawConnectors(tCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+                        drawLandmarks(tCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+                    } catch (e) {}
+                }
+                if (trainingData.length > 0) {
+                    const flat = flattenLandmarks(landmarks);
+                    const pred = knnClassify(flat);
+                    if (pred) {
+                        const now = Date.now();
+                        if (pred !== transLastSign || (now - transLastSignTime) > 1500) {
+                            transLastSign = pred;
+                            transLastSignTime = now;
+                            addDetectionToHistory(pred);
+                            if (translatedText) {
+                                translatedText.textContent = pred;
+                            }
+                            if ('speechSynthesis' in window) {
+                                try {
+                                    speechSynthesis.cancel();
+                                    const utter = new SpeechSynthesisUtterance(pred);
+                                    utter.rate = 0.9;
+                                    const preferredLang = getSpokenLangCode(selectedLanguage);
+                                    if (voiceSelector && voiceSelector.value !== '') {
+                                        utter.voice = voices[voiceSelector.value];
+                                    } else {
+                                        const matching = voices.find(v => v.lang.toLowerCase().startsWith(preferredLang));
+                                        if (matching) utter.voice = matching;
+                                        utter.lang = matching ? matching.lang : (preferredLang + '-' + (preferredLang === 'en' ? 'IN' : preferredLang === 'hi' ? 'IN' : 'IN'));
+                                    }
+                                    speechSynthesis.speak(utter);
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (transLastFaceResults && transLastFaceResults.multiFaceLandmarks && hasDraw && hasFaceMesh) {
+            for (const landmarks of transLastFaceResults.multiFaceLandmarks) {
+                try {
+                    drawConnectors(tCtx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                    drawConnectors(tCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
+                    drawConnectors(tCtx, landmarks, FACEMESH_RIGHT_EYEBROW, { color: '#FF3030' });
+                    drawConnectors(tCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
+                    drawConnectors(tCtx, landmarks, FACEMESH_LEFT_EYEBROW, { color: '#30FF30' });
+                    drawConnectors(tCtx, landmarks, FACEMESH_FACE_OVAL, { color: '#E0E0E0' });
+                    drawConnectors(tCtx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
+                } catch (e) {}
+            }
+        }
+        tCtx.restore();
+    }
+
     if (startTranslationBtn && stopTranslationBtn && translationWebcam) {
         let translationStream;
-        
+        startTranslationBtn.style.cursor = 'pointer';
+        stopTranslationBtn.style.cursor = 'pointer';
+
         startTranslationBtn.addEventListener('click', async function() {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     throw new Error('Media devices API not available in this browser');
                 }
-                
+
                 showStatus('Requesting camera permission...');
-                
-                translationStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
+
+                translationStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
                         width: { ideal: 640 },
                         height: { ideal: 480 },
                         frameRate: { ideal: 30, max: 30 },
@@ -891,17 +1055,48 @@ document.addEventListener('DOMContentLoaded', async function() {
                     },
                     audio: false
                 });
-                
+
                 translationWebcam.srcObject = translationStream;
-                showStatus('Camera connected successfully!');
-                
-                translationWebcam.onloadedmetadata = () => {
+                showStatus('Camera connected! Initializing translation detection...');
+
+                translationWebcam.onloadedmetadata = async () => {
                     translationWebcam.play();
-                    showStatus('Camera is streaming');
+                    if (translationCanvas) {
+                        translationCanvas.width = translationWebcam.videoWidth;
+                        translationCanvas.height = translationWebcam.videoHeight;
+                    }
+                    isTransCameraActive = true;
+                    continuousTransPreviewLoop();
+                    const mpReady = await ensureTranslationMediaPipe();
+                    if (mpReady) {
+                        try {
+                            translationCamera = new Camera(translationWebcam, {
+                                onFrame: async () => {
+                                    try {
+                                        const tasks = [];
+                                        if (translationHands) tasks.push(translationHands.send({ image: translationWebcam }).catch(() => {}));
+                                        if (translationFaceMesh) tasks.push(translationFaceMesh.send({ image: translationWebcam }).catch(() => {}));
+                                        await Promise.all(tasks);
+                                    } catch (e) {}
+                                },
+                                width: 640,
+                                height: 480
+                            });
+                            await translationCamera.start();
+                            showStatus(`Translation active for ${getLanguageName(selectedLanguage)}! Show your hands!`);
+                            if (translatedText && translatedText.textContent.includes('will appear here')) {
+                                translatedText.textContent = 'Awaiting sign detection...';
+                            }
+                        } catch (e) {
+                            console.warn('Failed to start translation camera:', e);
+                            showStatus('Camera active! (detection unavailable)');
+                        }
+                    } else {
+                        showStatus('Camera active! (detection scripts failed to load)');
+                    }
                 };
             } catch (error) {
                 let errorMessage = 'Could not access camera: ';
-                
                 switch (error.name) {
                     case 'NotAllowedError':
                         errorMessage += 'Permission denied. Please allow camera access in your browser settings.';
@@ -931,19 +1126,32 @@ document.addEventListener('DOMContentLoaded', async function() {
                         errorMessage += error.message;
                         showPermissionHelp(false);
                 }
-                
                 console.error('Translation camera access error:', error);
                 showStatus(errorMessage, true);
                 alert(errorMessage);
             }
         });
-        
+
         stopTranslationBtn.addEventListener('click', function() {
+            isTransCameraActive = false;
+            if (transAnimationId) {
+                cancelAnimationFrame(transAnimationId);
+                transAnimationId = null;
+            }
+            if (translationCamera) {
+                translationCamera.stop();
+                translationCamera = null;
+            }
             if (translationStream) {
                 translationStream.getTracks().forEach(track => track.stop());
                 translationWebcam.srcObject = null;
-                showStatus('Camera disconnected');
+                translationStream = null;
             }
+            if (translationCanvas) {
+                const tCtx = translationCanvas.getContext('2d');
+                tCtx.clearRect(0, 0, translationCanvas.width, translationCanvas.height);
+            }
+            showStatus('Camera disconnected');
         });
     }
 
