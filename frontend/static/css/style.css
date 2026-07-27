@@ -152,10 +152,16 @@ body {
     margin: 0 auto 2rem;
 }
 
-.video-container video, .video-container canvas {
+.video-container video {
     width: 100%;
     border-radius: 10px;
     background-color: #000;
+}
+
+.video-container canvas {
+    width: 100%;
+    border-radius: 10px;
+    background-color: transparent;
 }
 
 .controls {

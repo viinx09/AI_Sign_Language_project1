@@ -217,6 +217,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastHandResults = null;
     let lastFaceResults = null;
     let frameScheduled = false;
+    let isCameraActive = false;
+    let animationId = null;
     
     // Facial landmark indices for expressions
     const TOP_LIP = 13;
@@ -356,8 +358,15 @@ document.addEventListener('DOMContentLoaded', function() {
         scheduleRender();
     }
 
+    function continuousPreviewLoop() {
+        if (!isCameraActive) return;
+        renderCanvas();
+        animationId = requestAnimationFrame(continuousPreviewLoop);
+    }
+
     function scheduleRender() {
-        if (!frameScheduled) {
+        // Render is already handled by continuousPreviewLoop when camera is active
+        if (!isCameraActive && !frameScheduled) {
             frameScheduled = true;
             requestAnimationFrame(() => {
                 renderCanvas();
@@ -372,8 +381,10 @@ document.addEventListener('DOMContentLoaded', function() {
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw the video frame
-        if (lastHandResults && lastHandResults.image) {
+        // Always draw the current webcam frame so user can see themselves immediately
+        if (webcam && webcam.readyState === 4) {
+            canvasCtx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+        } else if (lastHandResults && lastHandResults.image) {
             canvasCtx.drawImage(lastHandResults.image, 0, 0, canvas.width, canvas.height);
         } else if (lastFaceResults && lastFaceResults.image) {
             canvasCtx.drawImage(lastFaceResults.image, 0, 0, canvas.width, canvas.height);
@@ -551,7 +562,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     canvas.width = webcam.videoWidth;
                     canvas.height = webcam.videoHeight;
                     
-                    // Initialize camera utility
+                    // Start continuous preview loop immediately so user can see video
+                    isCameraActive = true;
+                    continuousPreviewLoop();
+                    
+                    // Initialize camera utility for MediaPipe detection
                     camera = new Camera(webcam, {
                         onFrame: async () => {
                             const tasks = [];
@@ -615,6 +630,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         stopBtn.addEventListener('click', function() {
+            // Stop the continuous preview loop
+            isCameraActive = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
             if (camera) {
                 camera.stop();
                 camera = null;
@@ -627,6 +649,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
                 if (detectedText) {
                     detectedText.textContent = 'Waiting for detection...';
+                }
+                if (detectedFacial) {
+                    detectedFacial.textContent = 'Waiting for face...';
                 }
                 showStatus('Camera disconnected');
             }
