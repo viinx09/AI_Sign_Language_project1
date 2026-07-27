@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     const gestureForm = document.getElementById('gestureForm');
     const gestureList = document.getElementById('gestureList');
     const contactForm = document.getElementById('contactForm');
@@ -141,14 +141,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function loadCameras(askPermission = false) {
         if (!cameraSelect) return;
-        
+
         try {
             if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-                cameraSelect.innerHTML = '<option value="">Camera listing not available</option>';
+                cameraSelect.innerHTML = '<option value="">Use default camera</option>';
                 return;
             }
 
-            // Only request permission if explicitly asked (after user clicks start)
             if (askPermission) {
                 try {
                     const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -160,35 +159,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            cameraSelect.innerHTML = '';
-            
-            if (videoDevices.length === 0) {
-                cameraSelect.innerHTML = '<option value="">No cameras found</option>';
-                showStatus('No cameras detected', true);
-            } else {
-                    videoDevices.forEach((device, index) => {
-                        const option = document.createElement('option');
-                        option.value = device.deviceId;
-                        option.textContent = device.label || `Camera ${index + 1}`;
-                        cameraSelect.appendChild(option);
-                    });
-                    showStatus(`Found ${videoDevices.length} camera(s) available`);
-                }
-            } catch (error) {
-                    console.error('Error loading cameras:', error);
-                    cameraSelect.innerHTML = '<option value="">Error loading cameras</option>';
-                    showStatus('Error loading cameras: ' + error.message, true);
-            }
-        }
 
-    // Load cameras on page load
+            cameraSelect.innerHTML = '';
+
+            if (videoDevices.length === 0) {
+                cameraSelect.innerHTML = '<option value="">Use default camera</option>';
+                showStatus('Camera listing unavailable - default will be used');
+            } else {
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.textContent = device.label || `Camera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                showStatus(`Found ${videoDevices.length} camera(s) available`);
+            }
+        } catch (error) {
+            console.error('Error loading cameras:', error);
+            cameraSelect.innerHTML = '<option value="">Use default camera</option>';
+        }
+    }
+
+    // Load cameras on page load with timeout fallback
     if (cameraSelect) {
-        loadCameras();
+        const cameraTimeout = setTimeout(() => {
+            if (cameraSelect && cameraSelect.innerHTML.includes('Loading cameras')) {
+                cameraSelect.innerHTML = '<option value="">Use default camera</option>';
+            }
+        }, 3000);
+
+        loadCameras().then(() => {
+            clearTimeout(cameraTimeout);
+        }).catch(() => {
+            clearTimeout(cameraTimeout);
+            if (cameraSelect && cameraSelect.innerHTML.includes('Loading cameras')) {
+                cameraSelect.innerHTML = '<option value="">Use default camera</option>';
+            }
+        });
     }
 
     if (refreshCamerasBtn) {
-        refreshCamerasBtn.addEventListener('click', loadCameras);
+        refreshCamerasBtn.style.cursor = 'pointer';
+        refreshCamerasBtn.addEventListener('click', () => loadCameras(true));
     }
 
     // === SIGN DETECTION WITH MEDIAPIPE ===
@@ -219,6 +231,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let frameScheduled = false;
     let isCameraActive = false;
     let animationId = null;
+    // FPS throttling: target 30 FPS for preview and MediaPipe detection
+    const TARGET_FPS = 30;
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+    let lastFrameTime = 0;
+    let lastDetectionTime = 0;
     
     // Facial landmark indices for expressions
     const TOP_LIP = 13;
@@ -358,10 +375,15 @@ document.addEventListener('DOMContentLoaded', function() {
         scheduleRender();
     }
 
-    function continuousPreviewLoop() {
+    function continuousPreviewLoop(timestamp) {
         if (!isCameraActive) return;
-        renderCanvas();
         animationId = requestAnimationFrame(continuousPreviewLoop);
+        
+        const elapsed = timestamp - lastFrameTime;
+        if (elapsed < FRAME_INTERVAL) return; // skip frames to hit ~30 FPS
+        lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
+        
+        renderCanvas();
     }
 
     function scheduleRender() {
@@ -527,83 +549,115 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Detection mode toggles
     if (toggleHandOnly && toggleFaceOnly && toggleBoth) {
+        function applyDetectionModeUI() {
+            if (detectionMode === 'hands') {
+                toggleHandOnly.className = 'btn-primary';
+                toggleFaceOnly.className = 'btn-secondary';
+                toggleBoth.className = 'btn-secondary';
+            } else if (detectionMode === 'face') {
+                toggleHandOnly.className = 'btn-secondary';
+                toggleFaceOnly.className = 'btn-primary';
+                toggleBoth.className = 'btn-secondary';
+            } else {
+                toggleHandOnly.className = 'btn-secondary';
+                toggleFaceOnly.className = 'btn-secondary';
+                toggleBoth.className = 'btn-primary';
+            }
+        }
+        applyDetectionModeUI();
+
+        toggleHandOnly.style.cursor = 'pointer';
+        toggleFaceOnly.style.cursor = 'pointer';
+        toggleBoth.style.cursor = 'pointer';
+
         toggleHandOnly.addEventListener('click', () => {
             detectionMode = 'hands';
-            toggleHandOnly.className = 'btn-primary';
-            toggleFaceOnly.className = 'btn-secondary';
-            toggleBoth.className = 'btn-secondary';
+            applyDetectionModeUI();
+            showStatus('Detection mode: Hands Only');
+            if (detectedText) detectedText.textContent = 'Waiting for hands...';
         });
-        
+
         toggleFaceOnly.addEventListener('click', () => {
             detectionMode = 'face';
-            toggleHandOnly.className = 'btn-secondary';
-            toggleFaceOnly.className = 'btn-primary';
-            toggleBoth.className = 'btn-secondary';
+            applyDetectionModeUI();
+            showStatus('Detection mode: Face Only');
+            if (detectedFacial) detectedFacial.textContent = 'Waiting for face...';
         });
-        
+
         toggleBoth.addEventListener('click', () => {
             detectionMode = 'both';
-            toggleHandOnly.className = 'btn-secondary';
-            toggleFaceOnly.className = 'btn-secondary';
-            toggleBoth.className = 'btn-primary';
+            applyDetectionModeUI();
+            showStatus('Detection mode: Hands + Face');
         });
     }
 
     if (startBtn && stopBtn && webcam && canvas) {
-        // Check if MediaPipe scripts loaded before trying to initialize
-        let mediapipeReady = true;
-        try {
-            if (typeof Hands !== 'undefined') await initializeHands();
-            else mediapipeReady = false;
-            if (typeof FaceMesh !== 'undefined') await initializeFaceMesh();
-            else mediapipeReady = false;
-            if (typeof Camera === 'undefined') mediapipeReady = false;
-        } catch (e) {
-            console.warn('MediaPipe initialization failed, detection will be disabled:', e);
-            mediapipeReady = false;
+        startBtn.style.cursor = 'pointer';
+        stopBtn.style.cursor = 'pointer';
+        let mediapipeReady = false;
+        let mediapipeInitPromise = null;
+
+        async function ensureMediaPipeInitialized() {
+            if (mediapipeReady) return true;
+            if (mediapipeInitPromise) return mediapipeInitPromise;
+            mediapipeInitPromise = (async () => {
+                try {
+                    if (typeof Hands === 'undefined' || typeof FaceMesh === 'undefined' || typeof Camera === 'undefined') {
+                        console.warn('MediaPipe scripts not loaded, detection unavailable');
+                        return false;
+                    }
+                    await initializeHands();
+                    await initializeFaceMesh();
+                    mediapipeReady = true;
+                    return true;
+                } catch (e) {
+                    console.warn('MediaPipe initialization failed:', e);
+                    return false;
+                }
+            })();
+            return mediapipeInitPromise;
         }
-        
+
         startBtn.addEventListener('click', async function() {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     throw new Error('Media devices API not available in this browser');
                 }
-                
+
                 showStatus('Requesting camera permission...');
-                
+
                 const selectedCameraId = cameraSelect ? cameraSelect.value : '';
-                
+
                 const constraints = {
                     video: {
                         width: { ideal: 640 },
                         height: { ideal: 480 },
+                        frameRate: { ideal: 30, max: 30 },
                         facingMode: 'user'
                     },
                     audio: false
                 };
-                
+
                 if (selectedCameraId) {
                     constraints.video.deviceId = { exact: selectedCameraId };
                 }
-                
+
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
-                
+
                 webcam.srcObject = stream;
                 showStatus('Camera connected! Initializing detection...');
-                
+
                 webcam.onloadedmetadata = async () => {
                     webcam.play();
-                    
-                    // Set canvas size to match video
+
                     canvas.width = webcam.videoWidth;
                     canvas.height = webcam.videoHeight;
-                    
-                    // Start continuous preview loop immediately so user can see video
+
                     isCameraActive = true;
                     continuousPreviewLoop();
-                    
-                    // Initialize camera utility for MediaPipe detection only if ready
-                    if (mediapipeReady) {
+
+                    const mpReady = await ensureMediaPipeInitialized();
+                    if (mpReady) {
                         try {
                             camera = new Camera(webcam, {
                                 onFrame: async () => {
@@ -623,24 +677,24 @@ document.addEventListener('DOMContentLoaded', function() {
                                 width: 640,
                                 height: 480
                             });
-                            
+
                             await camera.start();
+                            showStatus('Detection active! Show your hands!');
                         } catch (e) {
                             console.warn('Failed to start MediaPipe camera:', e);
                             showStatus('Camera active! (MediaPipe detection unavailable)');
-                            return;
                         }
+                    } else {
+                        showStatus('Camera active! (Detection scripts failed to load)');
                     }
-                    showStatus('Detection active! Show your hands!');
                 };
-                
-                // Reload cameras to get labels now that we have permission
+
                 if (cameraSelect) {
                     loadCameras(true);
                 }
             } catch (error) {
                 let errorMessage = 'Could not access camera: ';
-                
+
                 switch (error.name) {
                     case 'NotAllowedError':
                         errorMessage += 'Permission denied. Please allow camera access in your browser settings.';
@@ -670,21 +724,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         errorMessage += error.message;
                         showPermissionHelp(false);
                 }
-                
+
                 console.error('Camera access error:', error);
                 showStatus(errorMessage, true);
                 alert(errorMessage);
             }
         });
-        
+
         stopBtn.addEventListener('click', function() {
-            // Stop the continuous preview loop
             isCameraActive = false;
             if (animationId) {
                 cancelAnimationFrame(animationId);
                 animationId = null;
             }
-            
+
             if (camera) {
                 camera.stop();
                 camera = null;
@@ -692,7 +745,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 webcam.srcObject = null;
-                // Clear canvas
                 const canvasCtx = canvas.getContext('2d');
                 canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
                 if (detectedText) {
@@ -728,6 +780,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     video: { 
                         width: { ideal: 640 },
                         height: { ideal: 480 },
+                        frameRate: { ideal: 30, max: 30 },
                         facingMode: 'user'
                     },
                     audio: false
