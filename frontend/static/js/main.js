@@ -23,15 +23,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (savedData) {
             try { loaded = JSON.parse(savedData); } catch (e) { loaded = []; }
         }
-        trainingData = loaded;
-        renderTrainingHistory();
-        if (recordStatus) {
-            if (loaded.length > 0) {
-                recordStatus.textContent = `Loaded ${loaded.length} training samples for ${getLanguageName(lang || selectedLanguage)}!`;
-            } else {
-                recordStatus.textContent = `No saved data yet for ${getLanguageName(lang || selectedLanguage)}. Start recording!`;
+        try { trainingData = loaded; } catch (e) { /* TDZ or undefined, call will be retried */ }
+        try { if (typeof renderTrainingHistory === 'function') renderTrainingHistory(); } catch (e) { /* ignore */ }
+        try {
+            if (recordStatus) {
+                if (loaded.length > 0) {
+                    recordStatus.textContent = `Loaded ${loaded.length} training samples for ${getLanguageName(lang || selectedLanguage)}!`;
+                } else {
+                    recordStatus.textContent = `No saved data yet for ${getLanguageName(lang || selectedLanguage)}. Start recording!`;
+                }
             }
-        }
+        } catch (e) { /* ignore */ }
         return loaded;
     }
 
@@ -42,14 +44,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     function onSelectedLanguageChanged(newLang) {
         selectedLanguage = newLang;
         localStorage.setItem('selectedLanguage', selectedLanguage);
-        if (gestureList) loadGestures();
-        loadVoices();
-        if (typeof renderTrainingHistory === 'function') {
-            loadTrainingDataForLanguage(selectedLanguage);
-        }
-        if (gestureLanguage) gestureLanguage.value = selectedLanguage;
-        if (filterLanguage) filterLanguage.value = selectedLanguage;
-        showStatus(`Switched to ${getLanguageName(selectedLanguage)}`);
+        try { if (gestureList) loadGestures(); } catch (e) { console.warn('loadGestures failed on language switch:', e); }
+        try { loadVoices(); } catch (e) { console.warn('loadVoices failed on language switch:', e); }
+        try {
+            if (typeof renderTrainingHistory === 'function') {
+                loadTrainingDataForLanguage(selectedLanguage);
+            }
+        } catch (e) { console.warn('Training data reload failed on language switch:', e); }
+        try {
+            if (gestureLanguage) gestureLanguage.value = selectedLanguage;
+            if (filterLanguage) filterLanguage.value = selectedLanguage;
+            if (languageSelect) languageSelect.value = selectedLanguage;
+            showStatus(`Switched to ${getLanguageName(selectedLanguage)}`);
+        } catch (e) { console.warn('UI sync on language switch failed:', e); }
     }
 
     // Initialize language selector if present
@@ -73,6 +80,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Initialize gesture language if present
     if (gestureLanguage) {
         gestureLanguage.value = selectedLanguage;
+
+        gestureLanguage.addEventListener('change', function() {
+            onSelectedLanguageChanged(this.value);
+        });
     }
 
     if (gestureForm) {
@@ -82,51 +93,74 @@ document.addEventListener('DOMContentLoaded', async function() {
             const desc = document.getElementById('gestureDesc').value;
             const lang = document.getElementById('gestureLanguage') ? 
                 document.getElementById('gestureLanguage').value : selectedLanguage;
-            
+
             try {
                 const response = await fetch('/api/gestures', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ 
-                        gesture_name: name, 
+                    body: JSON.stringify({
+                        gesture_name: name,
                         description: desc,
                         language: lang
                     })
                 });
-                
+
                 if (response.ok) {
                     alert('Gesture added successfully!');
                     gestureForm.reset();
-                    loadGestures();
+                    if (document.getElementById('gestureLanguage')) {
+                        document.getElementById('gestureLanguage').value = lang;
+                    }
+                    if (lang !== selectedLanguage) {
+                        onSelectedLanguageChanged(lang);
+                    } else {
+                        loadGestures();
+                    }
+                } else {
+                    alert('Failed to add gesture. Server returned: ' + response.status);
                 }
             } catch (error) {
                 console.error('Error adding gesture:', error);
+                alert('Could not add gesture: ' + error.message);
             }
         });
     }
 
     async function loadGestures() {
         if (!gestureList) return;
-        
+
         try {
             const response = await fetch(`/api/gestures?language=${selectedLanguage}`);
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
             const gestures = await response.json();
-            
+
             gestureList.innerHTML = '';
-            gestures.forEach(gesture => {
-                const li = document.createElement('li');
-                li.innerHTML = `<strong>${gesture[1]}</strong>: ${gesture[2]} <em>(${getLanguageName(gesture[3])})</em>`;
-                gestureList.appendChild(li);
-            });
-            
+            if (!gestures || gestures.length === 0) {
+                gestureList.innerHTML = `
+                    <li style="list-style: none; color: #999; text-align: center; padding: 2rem 1rem; border: 2px dashed #e0e0e0; border-radius: 6px; margin: 0;">
+                        No gestures yet for <strong>${getLanguageName(selectedLanguage)}</strong>.<br>
+                        <span style="font-size: 0.9rem;">Use the form on the left to add your first gesture!</span>
+                    </li>`;
+            } else {
+                gestures.forEach(gesture => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${escapeHtml(String(gesture[1] || ''))}</strong>: ${escapeHtml(String(gesture[2] || ''))} <em>(${getLanguageName(gesture[3])})</em>`;
+                    gestureList.appendChild(li);
+                });
+            }
+
             const totalGestures = document.getElementById('totalGestures');
             if (totalGestures) {
-                totalGestures.textContent = gestures.length;
+                totalGestures.textContent = (gestures || []).length;
             }
         } catch (error) {
-                console.error('Error loading gestures:', error);
+            console.error('Error loading gestures:', error);
+            gestureList.innerHTML = `
+                <li style="list-style: none; color: #c0392b; text-align: center; padding: 1.5rem 1rem; border: 1px solid #f5c6cb; background: #f8d7da; border-radius: 6px;">
+                    Failed to load gestures: ${escapeHtml(String(error.message || error))}
+                </li>`;
         }
     }
 
@@ -143,7 +177,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         return languages[code] || code;
     }
 
-    loadGestures();
+    try { loadGestures(); } catch (e) { console.warn('Initial loadGestures failed:', e); }
 
     if (contactForm) {
         contactForm.addEventListener('submit', function(e) {
@@ -371,9 +405,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
     
-    // Initial render on load
-    renderDetectionHistory();
-    renderTrainingHistory();
+    // Initial render on load (wrapped for safety in case of earlier errors
+    try { renderDetectionHistory(); } catch (e) { console.warn('renderDetectionHistory failed:', e); }
+    try { renderTrainingHistory(); } catch (e) { console.warn('renderTrainingHistory failed:', e); }
     
     // Facial landmark indices for expressions
     const TOP_LIP = 13;
@@ -1249,49 +1283,69 @@ document.addEventListener('DOMContentLoaded', async function() {
     let voices = [];
     
     function loadVoices() {
-        voices = speechSynthesis.getVoices();
+        try {
+            if (!('speechSynthesis' in window) || typeof speechSynthesis.getVoices !== 'function') {
+                if (voiceSelector) {
+                    voiceSelector.innerHTML = '<option value="">Speech not supported by browser</option>';
+                }
+                return;
+            }
+            voices = speechSynthesis.getVoices() || [];
+        } catch (e) {
+            console.warn('Error getting voices:', e);
+            voices = [];
+        }
         if (voiceSelector) {
             voiceSelector.innerHTML = '';
-            
-            // List of Indian language codes we want to show
+
             const indianLangs = ['en', 'hi', 'bn', 'ta', 'te', 'kn', 'mr', 'gu', 'pa', 'or', 'as', 'ml'];
-            
-            // Filter voices: English OR any Indian language
-            const filteredVoices = voices.filter(voice => {
-                const langCode = voice.lang.toLowerCase();
+
+            let filteredVoices = (voices || []).filter(voice => {
+                const langCode = (voice.lang || '').toLowerCase();
                 return indianLangs.some(indLang => langCode.startsWith(indLang));
             });
-            
+
+            if (filteredVoices.length === 0 && voices && voices.length > 0) {
+                filteredVoices = voices.slice();
+            }
+
             if (filteredVoices.length === 0) {
-                voiceSelector.innerHTML = '<option value="">No Indian/English voices found</option>';
+                voiceSelector.innerHTML = '<option value="">No voices available in this browser</option>';
             } else {
-                // Get the preferred spoken language for current selected sign language
                 const preferredLang = getSpokenLangCode(selectedLanguage);
-                
-                filteredVoices.forEach((voice, index) => {
+                let preferredPicked = false;
+                let englishFallbackPicked = false;
+
+                filteredVoices.forEach(voice => {
                     const option = document.createElement('option');
                     const originalIndex = voices.indexOf(voice);
-                    option.value = originalIndex;
-                    option.textContent = `${voice.name} (${voice.lang})`;
-                    
-                    // Auto-select voice matching the preferred language
-                    if (voice.lang.toLowerCase().startsWith(preferredLang)) {
+                    option.value = originalIndex >= 0 ? originalIndex : filteredVoices.indexOf(voice);
+                    option.textContent = `${voice.name || 'Voice'} (${voice.lang || 'unknown'})`;
+
+                    if (!preferredPicked && (voice.lang || '').toLowerCase().startsWith(preferredLang)) {
                         option.selected = true;
-                    } else if (voice.lang.startsWith('en') && !voiceSelector.querySelector('[selected]')) {
-                        // Fallback to English if no matching language found
+                        preferredPicked = true;
+                    } else if (!englishFallbackPicked && !preferredPicked && (voice.lang || '').toLowerCase().startsWith('en')) {
                         option.selected = true;
+                        englishFallbackPicked = true;
                     }
-                    
+
                     voiceSelector.appendChild(option);
                 });
             }
         }
     }
-    
-    // Some browsers load voices asynchronously
-    if ('speechSynthesis' in window) {
-        speechSynthesis.onvoiceschanged = loadVoices;
-        loadVoices(); // Try to load immediately
+
+    if (!('speechSynthesis' in window) && voiceSelector) {
+        voiceSelector.innerHTML = '<option value="">Speech synthesis unavailable</option>';
+    } else if ('speechSynthesis' in window) {
+        try {
+            speechSynthesis.onvoiceschanged = loadVoices;
+            loadVoices();
+        } catch (e) {
+            console.warn('Could not attach voices listener:', e);
+            loadVoices();
+        }
     }
     
     if (speakBtn) {
