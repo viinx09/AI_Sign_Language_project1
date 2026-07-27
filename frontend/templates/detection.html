@@ -78,6 +78,30 @@
             <h3 style="margin-top: 1.5rem;">Detected Facial Expression:</h3>
             <p id="detectedFacial" class="text-box" style="background-color: #fff0f5;">Waiting for face...</p>
         </div>
+
+        <!-- Detection History -->
+        <div class="detection-history" style="margin-top: 2rem; background-color: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #e0e0e0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">Detection History</h3>
+                <button id="clearDetectionHistory" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">Clear History</button>
+            </div>
+            <p style="color: #666; margin-bottom: 1rem;">Recent signs detected during this session:</p>
+            <div id="detectionHistoryList" style="max-height: 250px; overflow-y: auto; background: white; border-radius: 6px; padding: 0.5rem; min-height: 60px; border: 1px solid #eee;">
+                <p style="color: #999; text-align: center; padding: 1rem;">No signs detected yet.</p>
+            </div>
+        </div>
+
+        <!-- Recorded Training Signs History -->
+        <div class="training-history" style="margin-top: 2rem; background-color: #f5fffa; padding: 1.5rem; border-radius: 8px; border: 1px solid #c8e6c9;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">Recorded Signs (Training Data)</h3>
+                <button id="clearTrainingHistory" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">Clear All Recorded Signs</button>
+            </div>
+            <p style="color: #666; margin-bottom: 1rem;">All signs you have recorded for training the model:</p>
+            <div id="trainingHistoryList" style="max-height: 250px; overflow-y: auto; background: white; border-radius: 6px; padding: 0.5rem; min-height: 60px; border: 1px solid #eee;">
+                <p style="color: #999; text-align: center; padding: 1rem;">No signs recorded yet.</p>
+            </div>
+        </div>
     </div>
 </section>
 {% endblock %}

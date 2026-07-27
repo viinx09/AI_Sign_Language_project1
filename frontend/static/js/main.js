@@ -237,6 +237,113 @@ document.addEventListener('DOMContentLoaded', async function() {
     let lastFrameTime = 0;
     let lastDetectionTime = 0;
     
+    // Detection & Training History
+    let detectionHistory = JSON.parse(localStorage.getItem('detectionHistory') || '[]');
+    let lastLoggedSign = '';
+    let lastLoggedTime = 0;
+    const SIGN_LOG_COOLDOWN_MS = 1500; // Prevent duplicate entries for same sign
+    const clearDetectionHistoryBtn = document.getElementById('clearDetectionHistory');
+    const clearTrainingHistoryBtn = document.getElementById('clearTrainingHistory');
+    const detectionHistoryList = document.getElementById('detectionHistoryList');
+    const trainingHistoryList = document.getElementById('trainingHistoryList');
+    
+    function formatTime(timestamp) {
+        const d = new Date(timestamp);
+        const h = String(d.getHours()).padStart(2, '0');
+        const m = String(d.getMinutes()).padStart(2, '0');
+        const s = String(d.getSeconds()).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
+    
+    function addDetectionToHistory(signName) {
+        const now = Date.now();
+        if (signName === lastLoggedSign && (now - lastLoggedTime) < SIGN_LOG_COOLDOWN_MS) return;
+        lastLoggedSign = signName;
+        lastLoggedTime = now;
+        
+        detectionHistory.unshift({ sign: signName, time: now });
+        if (detectionHistory.length > 100) detectionHistory.pop();
+        localStorage.setItem('detectionHistory', JSON.stringify(detectionHistory));
+        renderDetectionHistory();
+    }
+    
+    function renderDetectionHistory() {
+        if (!detectionHistoryList) return;
+        if (detectionHistory.length === 0) {
+            detectionHistoryList.innerHTML = '<p style="color: #999; text-align: center; padding: 1rem;">No signs detected yet.</p>';
+            return;
+        }
+        detectionHistoryList.innerHTML = detectionHistory.map(item => `
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.8rem; border-bottom: 1px solid #f0f0f0;">
+                <span style="font-weight: 600; color: #2c3e50;">${escapeHtml(item.sign)}</span>
+                <span style="color: #888; font-size: 0.85rem;">${formatTime(item.time)}</span>
+            </div>
+        `).join('');
+    }
+    
+    function renderTrainingHistory() {
+        if (!trainingHistoryList) return;
+        if (trainingData.length === 0) {
+            trainingHistoryList.innerHTML = '<p style="color: #999; text-align: center; padding: 1rem;">No signs recorded yet.</p>';
+            return;
+        }
+        const counts = {};
+        trainingData.forEach(d => {
+            counts[d.label] = (counts[d.label] || 0) + 1;
+        });
+        const entries = Object.entries(counts);
+        const totalSamples = entries.reduce((s, e) => s + e[1], 0);
+        trainingHistoryList.innerHTML = `
+            <div style="padding: 0.5rem 0.8rem; border-bottom: 2px solid #e0e0e0; margin-bottom: 0.5rem;">
+                <span style="font-weight: 600; color: #2c3e50;">Total:</span>
+                <span style="color: #888;"> ${entries.length} sign(s) &middot; ${totalSamples} sample(s)</span>
+            </div>
+            ${entries.map(([label, count]) => `
+                <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.8rem; border-bottom: 1px solid #f0f0f0;">
+                    <span style="font-weight: 600; color: #27ae60;">${escapeHtml(label)}</span>
+                    <span style="color: #888; font-size: 0.9rem;">${count} sample(s)</span>
+                </div>
+            `).join('')}
+        `;
+    }
+    
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    
+    if (clearDetectionHistoryBtn) {
+        clearDetectionHistoryBtn.style.cursor = 'pointer';
+        clearDetectionHistoryBtn.addEventListener('click', () => {
+            if (confirm('Clear detection history?')) {
+                detectionHistory = [];
+                localStorage.removeItem('detectionHistory');
+                lastLoggedSign = '';
+                lastLoggedTime = 0;
+                renderDetectionHistory();
+                showStatus('Detection history cleared');
+            }
+        });
+    }
+    
+    if (clearTrainingHistoryBtn) {
+        clearTrainingHistoryBtn.style.cursor = 'pointer';
+        clearTrainingHistoryBtn.addEventListener('click', () => {
+            if (confirm('Delete ALL recorded training signs? This cannot be undone.')) {
+                trainingData = [];
+                localStorage.removeItem('signTrainingData');
+                renderTrainingHistory();
+                if (recordStatus) recordStatus.textContent = 'No saved data yet! Start by recording your first sign!';
+                showStatus('All recorded training signs deleted');
+            }
+        });
+    }
+    
+    // Initial render on load
+    renderDetectionHistory();
+    renderTrainingHistory();
+    
     // Facial landmark indices for expressions
     const TOP_LIP = 13;
     const BOTTOM_LIP = 14;
@@ -442,10 +549,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 } else if (trainingData.length > 0) {
                     const predictedSign = knnClassify(flatLandmarks);
                     if (detectedText && predictedSign) {
-                        // Only speak if the sign is different from last spoken
+                        addDetectionToHistory(predictedSign);
                         if (detectedText.textContent !== predictedSign) {
                             detectedText.textContent = predictedSign;
-                            // Speak the detected sign
                             if ('speechSynthesis' in window) {
                                 try {
                                     speechSynthesis.cancel();
@@ -514,15 +620,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             recordBtn.style.display = 'inline-block';
             
             if (currentSignData.length > 0) {
-                // Add recorded data to training set
                 const label = signNameInput.value;
                 currentSignData.forEach(landmarks => {
                     trainingData.push({ label, landmarks });
                 });
                 if (recordStatus) recordStatus.textContent = `Saved ${currentSignData.length} samples for "${label}"! Total training data: ${trainingData.length}`;
                 
-                // Save to localStorage
                 localStorage.setItem('signTrainingData', JSON.stringify(trainingData));
+                renderTrainingHistory();
             } else {
                 if (recordStatus) recordStatus.textContent = 'No data recorded!';
             }
@@ -545,6 +650,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Combine pre-loaded and saved data
         trainingData = [...preLoadedSigns, ...initialTrainingData];
+        renderTrainingHistory();
     }
 
     // Detection mode toggles
