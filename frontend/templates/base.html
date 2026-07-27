@@ -10,11 +10,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="SignAI">
-    <!-- MediaPipe Hands & FaceMesh -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 </head>
 <body>
     <nav class="navbar">
@@ -46,6 +41,17 @@
     <footer class="footer">
         <p>&copy; 2026 AI Sign Language Project. All rights reserved.</p>
     </footer>
+    <!-- MediaPipe Hands & FaceMesh (placed at end for non-blocking loading) -->
+    <script>
+        function _mediaPipeScriptError(name) {
+            console.warn('Failed to load MediaPipe script: ' + name + '. Detection features disabled.');
+            window._mediapipeFailed = true;
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" onerror="_mediaPipeScriptError('hands')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" onerror="_mediaPipeScriptError('face_mesh')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" onerror="_mediaPipeScriptError('camera_utils')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" onerror="_mediaPipeScriptError('drawing_utils')"></script>
     <script src="/static/js/main.js"></script>
 </body>
 </html>

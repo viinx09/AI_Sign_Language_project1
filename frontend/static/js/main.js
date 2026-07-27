@@ -390,11 +390,27 @@ document.addEventListener('DOMContentLoaded', function() {
             canvasCtx.drawImage(lastFaceResults.image, 0, 0, canvas.width, canvas.height);
         }
 
+        const hasDrawingUtils = typeof drawConnectors !== 'undefined' && typeof drawLandmarks !== 'undefined';
+        const hasHandConns = typeof HAND_CONNECTIONS !== 'undefined';
+        const hasFaceMesh = typeof FACEMESH_TESSELATION !== 'undefined' &&
+                            typeof FACEMESH_RIGHT_EYE !== 'undefined' &&
+                            typeof FACEMESH_RIGHT_EYEBROW !== 'undefined' &&
+                            typeof FACEMESH_LEFT_EYE !== 'undefined' &&
+                            typeof FACEMESH_LEFT_EYEBROW !== 'undefined' &&
+                            typeof FACEMESH_FACE_OVAL !== 'undefined' &&
+                            typeof FACEMESH_LIPS !== 'undefined';
+
         // Draw hand landmarks if in hands or both mode
         if ((detectionMode === 'hands' || detectionMode === 'both') && lastHandResults && lastHandResults.multiHandLandmarks) {
             for (const landmarks of lastHandResults.multiHandLandmarks) {
-                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
-                drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+                if (hasDrawingUtils && hasHandConns) {
+                    try {
+                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+                        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+                    } catch (e) {
+                        console.warn('Hand drawing error:', e);
+                    }
+                }
                 
                 // Collect data or classify
                 const flatLandmarks = flattenLandmarks(landmarks);
@@ -409,10 +425,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             detectedText.textContent = predictedSign;
                             // Speak the detected sign
                             if ('speechSynthesis' in window) {
-                                speechSynthesis.cancel();
-                                const utterance = new SpeechSynthesisUtterance(predictedSign);
-                                utterance.rate = 0.9;
-                                speechSynthesis.speak(utterance);
+                                try {
+                                    speechSynthesis.cancel();
+                                    const utterance = new SpeechSynthesisUtterance(predictedSign);
+                                    utterance.rate = 0.9;
+                                    speechSynthesis.speak(utterance);
+                                } catch (e) {
+                                    console.warn('Speech error:', e);
+                                }
                             }
                         }
                     }
@@ -433,13 +453,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Draw face landmarks if in face or both mode
         if ((detectionMode === 'face' || detectionMode === 'both') && lastFaceResults && lastFaceResults.multiFaceLandmarks) {
             for (const landmarks of lastFaceResults.multiFaceLandmarks) {
-                drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYEBROW, { color: '#FF3030' });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYEBROW, { color: '#30FF30' });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_FACE_OVAL, { color: '#E0E0E0' });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
+                if (hasDrawingUtils && hasFaceMesh) {
+                    try {
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYEBROW, { color: '#FF3030' });
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYEBROW, { color: '#30FF30' });
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_FACE_OVAL, { color: '#E0E0E0' });
+                        drawConnectors(canvasCtx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
+                    } catch (e) {
+                        console.warn('Face drawing error:', e);
+                    }
+                }
             }
         }
 
@@ -524,8 +550,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (startBtn && stopBtn && webcam && canvas) {
-        initializeHands();
-        initializeFaceMesh();
+        // Check if MediaPipe scripts loaded before trying to initialize
+        let mediapipeReady = true;
+        try {
+            if (typeof Hands !== 'undefined') await initializeHands();
+            else mediapipeReady = false;
+            if (typeof FaceMesh !== 'undefined') await initializeFaceMesh();
+            else mediapipeReady = false;
+            if (typeof Camera === 'undefined') mediapipeReady = false;
+        } catch (e) {
+            console.warn('MediaPipe initialization failed, detection will be disabled:', e);
+            mediapipeReady = false;
+        }
         
         startBtn.addEventListener('click', async function() {
             try {
@@ -566,23 +602,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     isCameraActive = true;
                     continuousPreviewLoop();
                     
-                    // Initialize camera utility for MediaPipe detection
-                    camera = new Camera(webcam, {
-                        onFrame: async () => {
-                            const tasks = [];
-                            if (detectionMode === 'hands' || detectionMode === 'both') {
-                                tasks.push(hands.send({ image: webcam }));
-                            }
-                            if (detectionMode === 'face' || detectionMode === 'both') {
-                                tasks.push(faceMesh.send({ image: webcam }));
-                            }
-                            await Promise.all(tasks);
-                        },
-                        width: 640,
-                        height: 480
-                    });
-                    
-                    await camera.start();
+                    // Initialize camera utility for MediaPipe detection only if ready
+                    if (mediapipeReady) {
+                        try {
+                            camera = new Camera(webcam, {
+                                onFrame: async () => {
+                                    try {
+                                        const tasks = [];
+                                        if ((detectionMode === 'hands' || detectionMode === 'both') && hands) {
+                                            tasks.push(hands.send({ image: webcam }).catch(err => console.warn('Hands detection error:', err)));
+                                        }
+                                        if ((detectionMode === 'face' || detectionMode === 'both') && faceMesh) {
+                                            tasks.push(faceMesh.send({ image: webcam }).catch(err => console.warn('FaceMesh detection error:', err)));
+                                        }
+                                        await Promise.all(tasks);
+                                    } catch (e) {
+                                        console.warn('MediaPipe onFrame error:', e);
+                                    }
+                                },
+                                width: 640,
+                                height: 480
+                            });
+                            
+                            await camera.start();
+                        } catch (e) {
+                            console.warn('Failed to start MediaPipe camera:', e);
+                            showStatus('Camera active! (MediaPipe detection unavailable)');
+                            return;
+                        }
+                    }
                     showStatus('Detection active! Show your hands!');
                 };
                 
